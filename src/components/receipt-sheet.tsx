@@ -1,97 +1,129 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Camera, Check, Loader2, ScanLine } from "lucide-react";
+import { Camera, Check, ImageUp, Loader2, RotateCcw, ScanLine } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useAddTransactions, useFinance } from "@/lib/data";
-import { formatMoney } from "@/lib/currency";
+import { GCC_CURRENCIES, decimalsFor, formatMoney, type GccCurrency } from "@/lib/currency";
+import { accountKind, allocateReceipt, groupReceipt, paymentMethodFor } from "@/lib/finance";
+import { photoToDataUrl } from "@/lib/image";
+import { scanReceipt } from "@/lib/receipt.functions";
+import type { ScannedReceipt } from "@/lib/receipt-types";
 import { evaluateSpend } from "@/lib/spend-guard";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { AccountForm, AccountPicker } from "./accounts";
 import { CategoryIcon } from "./category-icon";
 import { Segmented } from "./segmented";
 
-type Item = { name: string; price: number; category: string };
-const RECEIPTS: Record<"carrefour" | "costco", { merchant: string; raw: string; items: Item[] }> = {
-  carrefour: {
-    merchant: "Carrefour City Centre Deira",
-    raw: "CARREFOUR CCD 0112 DXB AE",
-    items: [
-      { name: "Almarai Fresh Milk 2L", price: 12.5, category: "groceries" },
-      { name: "Al Ain Water 12×1.5L", price: 15.75, category: "groceries" },
-      { name: "Khalas Dates 1kg", price: 42.0, category: "groceries" },
-      { name: "Basmati Rice 5kg", price: 54.0, category: "groceries" },
-      { name: "Chicken Breast 1kg", price: 38.5, category: "groceries" },
-      { name: "JBL Tune Buds", price: 299.0, category: "electronics" },
-      { name: "Anker USB-C Cable 2m", price: 39.0, category: "electronics" },
-    ],
-  },
-  costco: {
-    merchant: "Costco Wholesale",
-    raw: "COSTCO WHSE #1204 POS 88",
-    items: [
-      { name: "Kirkland Olive Oil 2L", price: 69.0, category: "groceries" },
-      { name: "Rotisserie Chicken", price: 25.0, category: "groceries" },
-      { name: "Kirkland Mixed Nuts 1.1kg", price: 89.0, category: "groceries" },
-      { name: 'Samsung 55" Crystal UHD TV', price: 1899.0, category: "electronics" },
-      { name: "Duracell AA ×40", price: 48.0, category: "electronics" },
-    ],
-  },
-};
+type Stage = "pick" | "reading" | "review";
+
+/** Purchase time for the ledger: the receipt's date (if in the past), else now. */
+function occurredAt(date: string | null) {
+  const now = new Date();
+  if (!date) return now.toISOString();
+  const d = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(d.getTime()) || d > now || d.toDateString() === now.toDateString()) return now.toISOString();
+  return d.toISOString();
+}
 
 export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t, locale } = useI18n();
   const { profile, accounts, budgets, transactions } = useFinance();
   const add = useAddTransactions();
-  const [which, setWhich] = useState<"carrefour" | "costco">("carrefour");
-  const [stage, setStage] = useState<"idle" | "scanning" | "done">("idle");
+  const scan = useServerFn(scanReceipt);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
-  const receipt = RECEIPTS[which];
-  const groups = Object.entries(
-    receipt.items.reduce<Record<string, Item[]>>((acc, i) => {
-      (acc[i.category] ??= []).push(i);
-      return acc;
-    }, {}),
-  );
-  const total = receipt.items.reduce((s, i) => s + i.price, 0);
+  const [stage, setStage] = useState<Stage>("pick");
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ScannedReceipt | null>(null);
+  const [merchant, setMerchant] = useState("");
+  const [currency, setCurrency] = useState<GccCurrency>(profile.base_currency as GccCurrency);
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [addingAccount, setAddingAccount] = useState(false);
+
   const catLabel = (c: string) => t(`cat.${c}` as MessageKey);
+  const matching = accounts.filter((a) => a.currency === currency);
+  const account = matching.find((a) => a.id === accountId) ?? null;
 
-  function snap() {
-    setStage("scanning");
-    window.setTimeout(() => setStage("done"), 1400);
+  const groups = useMemo(() => {
+    if (!receipt) return [];
+    const d = decimalsFor(currency);
+    return groupReceipt(allocateReceipt(receipt.items, receipt.total, d), d);
+  }, [receipt, currency]);
+  const total = groups.reduce((s, g) => s + g.amount, 0);
+  const itemCount = groups.reduce((s, g) => s + g.lines.length, 0);
+
+  function reset() {
+    setStage("pick");
+    setPreview(null);
+    setError(null);
+    setReceipt(null);
+    setAddingAccount(false);
+  }
+
+  function pickAccount(cur: string) {
+    const list = accounts.filter((a) => a.currency === cur);
+    const preferred = list.find((a) => accountKind(a.account_type) !== "cash") ?? list[0];
+    setAccountId(preferred?.id ?? null);
+  }
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setStage("reading");
+    try {
+      const dataUrl = await photoToDataUrl(file);
+      setPreview(dataUrl);
+      const res = await scan({ data: { image: dataUrl } });
+      if (!res.ok) {
+        setError(t(`receipt.err.${res.reason}`));
+        setStage("pick");
+        return;
+      }
+      const cur = (res.receipt.currency ?? profile.base_currency) as GccCurrency;
+      setReceipt(res.receipt);
+      setMerchant(res.receipt.merchant);
+      setCurrency(cur);
+      pickAccount(cur);
+      setStage("review");
+    } catch {
+      setError(t("receipt.err.failed"));
+      setStage("pick");
+    }
   }
 
   async function confirm() {
-    for (const [cat, items] of groups) {
-      const sum = items.reduce((s, i) => s + i.price, 0);
-      const check = evaluateSpend(profile, budgets, transactions, cat, sum, "AED");
+    if (!receipt || !account) return;
+    for (const g of groups) {
+      const check = evaluateSpend(profile, budgets, transactions, g.category, g.amount, currency);
       if (!check.allowed) {
-        toast.error(t("quick.blocked", { amount: formatMoney(check.remaining, check.base, locale), category: catLabel(cat) }));
+        toast.error(t("quick.blocked", { amount: formatMoney(check.remaining, check.base, locale), category: catLabel(g.category) }));
         return;
       }
     }
-    const account =
-      accounts.find((a) => a.currency === "AED" && a.account_type === "current") ??
-      accounts.find((a) => a.currency === "AED") ??
-      null;
     const receiptId = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const when = occurredAt(receipt.date);
+    const name = merchant.trim() || receipt.merchant;
     await add.mutateAsync(
-      groups.map(([cat, items]) => ({
-        account_id: account?.id ?? null,
-        merchant_raw: receipt.raw,
-        merchant_name: `${receipt.merchant} · ${catLabel(cat)}`,
-        amount: Math.round(items.reduce((s, i) => s + i.price, 0) * 100) / 100,
-        currency: "AED",
-        category: cat,
+      groups.map((g) => ({
+        account_id: account.id,
+        merchant_raw: g.lines.map((l) => l.name).join(", ").slice(0, 240),
+        merchant_name: groups.length > 1 ? `${name} · ${catLabel(g.category)}` : name,
+        amount: g.amount,
+        currency,
+        category: g.category,
         direction: "debit",
-        payment_method: "card",
+        payment_method: paymentMethodFor(account.account_type),
         shariah_compliant: true,
         receipt_id: receiptId,
-        occurred_at: now,
+        occurred_at: when,
       })),
     );
-    toast.success(t("receipt.saved", { n: groups.length }));
-    setStage("idle");
+    toast.success(t("receipt.saved", { n: groups.length }), { description: formatMoney(total, currency, locale) });
+    reset();
     onOpenChange(false);
   }
 
@@ -99,7 +131,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
     <Drawer
       open={open}
       onOpenChange={(o) => {
-        if (!o) setStage("idle");
+        if (!o && stage !== "reading") reset();
         onOpenChange(o);
       }}
     >
@@ -108,94 +140,158 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
           <DrawerTitle className="mb-1 flex items-center gap-2 text-base font-semibold">
             <ScanLine className="size-5 text-gold" /> {t("receipt.title")}
           </DrawerTitle>
-          <p className="mb-4 text-xs text-muted-foreground">{t("receipt.demo")}</p>
 
-          <Segmented
-            className="mb-4 w-full"
-            size="sm"
-            value={which}
-            onChange={(v) => {
-              setWhich(v);
-              setStage("idle");
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              void onFile(e.target.files?.[0]);
+              e.target.value = "";
             }}
-            options={[
-              { value: "carrefour", label: "Carrefour" },
-              { value: "costco", label: "Costco" },
-            ]}
+          />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            className="hidden"
+            aria-label={t("receipt.upload")}
+            onChange={(e) => {
+              void onFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
           />
 
-          {stage !== "done" ? (
-            <div className="relative overflow-hidden rounded-3xl border border-dashed border-gold/40 bg-surface p-5">
-              <div className="space-y-2 font-mono text-[11px] text-muted-foreground/70" aria-hidden>
-                <p className="text-center font-bold text-foreground/70">{receipt.merchant.toUpperCase()}</p>
-                {receipt.items.map((i) => (
-                  <div key={i.name} className="flex justify-between">
-                    <span>{i.name}</span>
-                    <span>{i.price.toFixed(2)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between border-t border-dashed border-border pt-2 font-bold">
-                  <span>TOTAL AED</span>
-                  <span>{total.toFixed(2)}</span>
-                </div>
+          {stage === "pick" && (
+            <>
+              <p className="mb-4 text-xs text-muted-foreground">{t("receipt.intro")}</p>
+              {error && <p className="mb-4 rounded-2xl bg-destructive/15 px-4 py-3 text-sm text-destructive">{error}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => cameraRef.current?.click()}
+                  className="flex flex-col items-center gap-2 rounded-3xl bg-gradient-gold py-6 font-bold text-gold-foreground shadow-gold active:scale-[0.98]"
+                >
+                  <Camera className="size-6" /> {t("receipt.take")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => galleryRef.current?.click()}
+                  className="flex flex-col items-center gap-2 rounded-3xl border border-gold/30 bg-surface py-6 font-bold active:scale-[0.98]"
+                >
+                  <ImageUp className="size-6 text-gold" /> {t("receipt.upload")}
+                </button>
               </div>
-              {stage === "scanning" && (
-                <>
-                  <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-gold shadow-gold animate-scan" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-overlay/40">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-semibold">
-                      <Loader2 className="size-4 animate-spin text-gold" /> {t("receipt.scanning")}
-                    </span>
-                  </div>
-                </>
-              )}
+            </>
+          )}
+
+          {stage === "reading" && (
+            <div className="relative mt-3 flex min-h-64 items-center justify-center overflow-hidden rounded-3xl border border-dashed border-gold/40 bg-surface">
+              {preview && <img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
+              <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-gold shadow-gold animate-scan" />
+              <span className="relative inline-flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-semibold">
+                <Loader2 className="size-4 animate-spin text-gold" /> {t("receipt.scanning")}
+              </span>
             </div>
-          ) : (
-            <div className="space-y-3">
+          )}
+
+          {stage === "review" && receipt && (
+            <div className="mt-3 space-y-4">
               <p className="flex items-center gap-2 text-sm font-semibold text-primary">
                 <Check className="size-4" />
-                {t("receipt.detected", { count: receipt.items.length, groups: groups.length })}
+                {t("receipt.detected", { count: itemCount, groups: groups.length })}
               </p>
-              {groups.map(([cat, items]) => (
-                <div key={cat} className="rounded-3xl border border-border bg-surface p-4">
+
+              <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("receipt.merchant")}</span>
+                  <input
+                    value={merchant}
+                    onChange={(e) => setMerchant(e.target.value)}
+                    className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
+                  />
+                </label>
+                <Segmented
+                  size="sm"
+                  value={currency}
+                  onChange={(c) => {
+                    setCurrency(c);
+                    pickAccount(c);
+                    setAddingAccount(false);
+                  }}
+                  options={GCC_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                />
+              </div>
+
+              {groups.map((g) => (
+                <div key={g.category} className="rounded-3xl border border-border bg-surface p-4">
                   <div className="mb-2 flex items-center gap-3">
-                    <CategoryIcon category={cat} size="sm" />
-                    <span className="flex-1 font-semibold">{catLabel(cat)}</span>
-                    <span className="font-bold tabular-nums">
-                      {formatMoney(items.reduce((s, i) => s + i.price, 0), "AED", locale)}
-                    </span>
+                    <CategoryIcon category={g.category} size="sm" />
+                    <span className="flex-1 font-semibold">{catLabel(g.category)}</span>
+                    <span className="font-bold tabular-nums">{formatMoney(g.amount, currency, locale)}</span>
                   </div>
                   <ul className="space-y-1 ps-12 text-xs text-muted-foreground">
-                    {items.map((i) => (
-                      <li key={i.name} className="flex justify-between gap-2">
-                        <span className="truncate">{i.name}</span>
-                        <span className="tabular-nums">{i.price.toFixed(2)}</span>
+                    {g.lines.map((l, i) => (
+                      <li key={`${l.name}-${i}`} className="flex justify-between gap-2">
+                        <span className="truncate">{l.name}</span>
+                        <span className="tabular-nums">{l.price.toFixed(decimalsFor(currency))}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
               ))}
-              <div className="flex justify-between px-1 text-sm">
-                <span className="text-muted-foreground">{t("receipt.vat")}</span>
+
+              <div className="flex items-center justify-between px-1 text-sm">
+                <span className="text-xs text-muted-foreground">{t("receipt.vat")}</span>
                 <span className="font-bold">
-                  {t("receipt.total")} {formatMoney(total, "AED", locale)}
+                  {t("receipt.total")} {formatMoney(total, currency, locale)}
                 </span>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">{t("receipt.paidFrom")}</p>
+                {matching.length > 0 && !addingAccount ? (
+                  <AccountPicker accounts={matching} value={accountId} onChange={setAccountId} />
+                ) : (
+                  <div className="space-y-3 rounded-3xl border border-border p-4">
+                    <p className="text-sm">{t("receipt.noAccount", { currency })}</p>
+                    <AccountForm
+                      defaultCurrency={currency}
+                      lockCurrency
+                      onSaved={(a) => {
+                        setAccountId(a.id);
+                        setAddingAccount(false);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-[auto_1fr] gap-3">
+                <button
+                  type="button"
+                  onClick={reset}
+                  aria-label={t("receipt.retake")}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border px-4 text-sm font-semibold text-muted-foreground"
+                >
+                  <RotateCcw className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={add.isPending || !account || groups.length === 0}
+                  onClick={confirm}
+                  className={cn(
+                    "inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-base font-bold text-primary-foreground shadow-emerald transition-transform active:scale-[0.98] disabled:opacity-60",
+                  )}
+                >
+                  {add.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-5" />}
+                  {t("receipt.confirm")}
+                </button>
               </div>
             </div>
           )}
-
-          <button
-            type="button"
-            disabled={stage === "scanning" || add.isPending}
-            onClick={stage === "done" ? confirm : snap}
-            className={cn(
-              "mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-base font-bold transition-transform active:scale-[0.98] disabled:opacity-60",
-              stage === "done" ? "bg-primary text-primary-foreground shadow-emerald" : "bg-gradient-gold text-gold-foreground shadow-gold",
-            )}
-          >
-            {add.isPending ? <Loader2 className="size-4 animate-spin" /> : stage === "done" ? <Check className="size-5" /> : <Camera className="size-5" />}
-            {stage === "done" ? t("receipt.confirm") : t("receipt.snap")}
-          </button>
         </div>
       </DrawerContent>
     </Drawer>
