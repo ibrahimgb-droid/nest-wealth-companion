@@ -128,11 +128,13 @@ export function useAddTransactions() {
   });
 }
 
+/** Deletes an entry; deleting either side of a transfer removes both sides. */
 export function useDeleteTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("transactions").delete().eq("id", id);
+    mutationFn: async (tx: Pick<Transaction, "id" | "transfer_id">) => {
+      const q = supabase.from("transactions").delete();
+      const { error } = await (tx.transfer_id ? q.eq("transfer_id", tx.transfer_id) : q.eq("id", tx.id));
       if (error) throw error;
     },
     onSuccess: () => {

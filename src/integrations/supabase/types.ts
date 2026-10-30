@@ -155,6 +155,7 @@ export type Database = {
           payment_method: string
           receipt_id: string | null
           shariah_compliant: boolean
+          transfer_id: string | null
           user_id: string
         }
         Insert: {
@@ -171,6 +172,7 @@ export type Database = {
           payment_method?: string
           receipt_id?: string | null
           shariah_compliant?: boolean
+          transfer_id?: string | null
           user_id: string
         }
         Update: {
@@ -187,6 +189,7 @@ export type Database = {
           payment_method?: string
           receipt_id?: string | null
           shariah_compliant?: boolean
+          transfer_id?: string | null
           user_id?: string
         }
         Relationships: [
