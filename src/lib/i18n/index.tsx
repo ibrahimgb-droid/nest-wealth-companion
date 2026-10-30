@@ -22,9 +22,9 @@ interface I18nValue {
 // Hot reloads re-run this module; reuse the same context object so the
 // provider already mounted in the root and the pages keep matching.
 const I18nContext: Context<I18nValue | null> =
-  (import.meta.hot?.data["i18nContext"] as Context<I18nValue | null> | undefined) ??
+  (import.meta.hot?.data?.["i18nContext"] as Context<I18nValue | null> | undefined) ??
   createContext<I18nValue | null>(null);
-if (import.meta.hot) import.meta.hot.data["i18nContext"] = I18nContext;
+if (import.meta.hot?.data) import.meta.hot.data["i18nContext"] = I18nContext;
 
 // Safe fallback (English, no-op setter) so a missing provider never blanks the screen.
 const FALLBACK: I18nValue = {
