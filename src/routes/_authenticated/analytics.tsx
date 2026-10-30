@@ -95,7 +95,7 @@ function Analytics() {
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xs text-muted-foreground">{t("analytics.spending")}</span>
-            <span className="font-display text-2xl font-medium">{money(d.totalSpend, true)}</span>
+            <span className="font-display text-xl font-medium">{money(d.totalSpend, true)}</span>
           </div>
         </div>
         <ul className="mt-4 space-y-2">

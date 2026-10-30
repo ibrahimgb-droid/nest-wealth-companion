@@ -74,7 +74,7 @@ export const en = {
   "quick.merchant": "Where? (optional)",
   "quick.save": "Save",
   "quick.saved": "Saved to your ledger",
-  "quick.blocked": "Envelope empty — only {amount} left in {category}",
+  "quick.blocked": "Not enough in this envelope — only {amount} left in {category}",
   "quick.near": "Heads up: {category} is at {pct}% of budget",
   "quick.over": "{category} is now over budget",
 

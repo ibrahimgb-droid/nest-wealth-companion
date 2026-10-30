@@ -77,7 +77,7 @@ export const ar: Record<MessageKey, string> = {
   "quick.merchant": "وين؟ (اختياري)",
   "quick.save": "حفظ",
   "quick.saved": "انحفظت في سجلك",
-  "quick.blocked": "الظرف فاضي — باقي {amount} بس في {category}",
+  "quick.blocked": "الظرف ما يكفي — باقي {amount} بس في {category}",
   "quick.near": "انتبه: {category} وصل {pct}٪ من الميزانية",
   "quick.over": "{category} تعدّى الميزانية",
 
