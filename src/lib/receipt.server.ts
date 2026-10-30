@@ -56,7 +56,7 @@ export async function readReceipt(imageDataUrl: string): Promise<ReceiptScanResu
           role: "user",
           content: [
             { type: "text", text: "Read this receipt." },
-            { type: "image", image: new URL(imageDataUrl) },
+            { type: "file", data: new URL(imageDataUrl), mediaType: imageDataUrl.slice(5, imageDataUrl.indexOf(";")) },
           ],
         },
       ],

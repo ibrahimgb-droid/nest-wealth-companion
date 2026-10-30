@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { arSA, enUS } from "date-fns/locale";
-import { Banknote, ScanLine, Search } from "lucide-react";
+import { ReceiptText, ScanLine, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PageLoader } from "@/components/page-loader";
 import { QuickAddSheet } from "@/components/quick-add-sheet";
@@ -78,7 +78,7 @@ function Transactions() {
           onClick={() => setQuickOpen(true)}
           className="flex flex-col items-start gap-3 rounded-3xl bg-gradient-gold p-4 text-start text-gold-foreground shadow-gold active:scale-[0.98]"
         >
-          <Banknote className="size-6" />
+          <ReceiptText className="size-6" />
           <span>
             <span className="block font-bold">{t("tx.addCash")}</span>
             <span className="block text-xs opacity-75">{t("tx.addCashHint")}</span>
