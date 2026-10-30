@@ -89,6 +89,7 @@ export type Database = {
           id: string
           locale: string
           monthly_income: number
+          onboarded_at: string | null
           pension_country: string | null
           pension_salary: number | null
           pension_years: number | null
@@ -108,6 +109,7 @@ export type Database = {
           id: string
           locale?: string
           monthly_income?: number
+          onboarded_at?: string | null
           pension_country?: string | null
           pension_salary?: number | null
           pension_years?: number | null
@@ -127,6 +129,7 @@ export type Database = {
           id?: string
           locale?: string
           monthly_income?: number
+          onboarded_at?: string | null
           pension_country?: string | null
           pension_salary?: number | null
           pension_years?: number | null
