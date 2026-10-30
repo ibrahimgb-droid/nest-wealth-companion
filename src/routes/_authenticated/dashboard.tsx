@@ -98,7 +98,7 @@ function Dashboard() {
         <img src={heroImg} alt="" width={1024} height={1536} className="absolute inset-0 h-full w-full object-cover opacity-20 mix-blend-luminosity" />
         <div className="relative">
           <p className="text-xs font-semibold tracking-widest text-gold uppercase">{t("dash.netWorth")}</p>
-          <p className="mt-2 font-display text-[2.6rem] leading-none font-medium tracking-tight">
+          <p className="mt-2 font-display text-[2.4rem] leading-none font-medium tracking-tight whitespace-nowrap">
             {formatMoney(data.netWorth, base, locale)}
           </p>
           <p className="mt-2 text-xs text-foreground/60">{t("dash.netWorthHint", { currency: base })}</p>
@@ -106,11 +106,11 @@ function Dashboard() {
           <ul className="mt-6 space-y-2.5">
             {data.regions.map((r) => (
               <li key={r.region} className="flex items-center justify-between rounded-2xl bg-background/30 px-4 py-3 backdrop-blur">
-                <span className="flex items-center gap-2.5 text-sm font-medium">
+                <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium">
                   <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-[10px] font-bold text-gold">{r.region}</span>
-                  {t(`dash.region.${r.region}`)}
+                  <span className="truncate">{t(`dash.region.${r.region}`)}</span>
                 </span>
-                <span className="font-bold tabular-nums">{formatMoney(r.total, r.currency, locale)}</span>
+                <span className="shrink-0 whitespace-nowrap ps-2 font-bold tabular-nums">{formatMoney(r.total, r.currency, locale)}</span>
               </li>
             ))}
           </ul>
@@ -119,16 +119,16 @@ function Dashboard() {
 
       {/* Safe to spend */}
       <Card className="mt-5">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
               <Sparkles className="size-4 text-gold" /> {t("dash.safeToSpend")}
             </p>
-            <p className="mt-1 font-display text-4xl font-medium tracking-tight text-primary">
+            <p className="mt-1 font-display text-[2rem] leading-tight font-medium tracking-tight whitespace-nowrap text-primary">
               {formatMoney(data.safe.amount, base, locale)}
             </p>
           </div>
-          <span className="rounded-full bg-gold-soft px-3 py-1 text-xs font-bold text-gold">
+          <span className="shrink-0 rounded-full bg-gold-soft px-3 py-1 text-xs font-bold whitespace-nowrap text-gold">
             {t("common.perDay", { amount: formatMoney(data.safe.perDay, base, locale, { compact: true }) })}
           </span>
         </div>

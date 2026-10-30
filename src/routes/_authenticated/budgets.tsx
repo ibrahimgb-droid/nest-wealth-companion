@@ -8,7 +8,7 @@ import { PageLoader } from "@/components/page-loader";
 import { Segmented } from "@/components/segmented";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { ensureFinanceData, useDeleteBudget, useFinance, useUpdateProfile, useUpsertBudget } from "@/lib/data";
-import { formatMoney } from "@/lib/currency";
+import { formatAmount, formatMoney } from "@/lib/currency";
 import { SPEND_CATEGORIES, spendByCategory, toBeAssigned, type BudgetMode } from "@/lib/finance";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -133,10 +133,10 @@ function Budgets() {
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      {t("budget.spentOf", { spent: money(s), limit: money(limit) })}
+                      {t("budget.spentOf", { spent: formatAmount(s, base), limit: formatMoney(limit, base, locale) })}
                     </p>
                   </div>
-                  <span className={cn("text-sm font-bold tabular-nums", over ? "text-destructive" : "text-primary")}>
+                  <span className={cn("shrink-0 text-sm font-bold whitespace-nowrap tabular-nums", over ? "text-destructive" : "text-primary")}>
                     {over ? t("budget.over", { amount: money(s - limit) }) : t("budget.left", { amount: money(limit - s) })}
                   </span>
                 </div>
