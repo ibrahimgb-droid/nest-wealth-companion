@@ -8,6 +8,13 @@
       "when": 1793351016828,
       "tag": "0000_finance_core_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793353036516,
+      "tag": "0001_onboarding_and_account_types",
+      "breakpoints": true
     }
   ]
 }
