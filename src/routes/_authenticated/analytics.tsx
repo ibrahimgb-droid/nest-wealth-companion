@@ -71,7 +71,7 @@ function Analytics() {
 
     const merchantMap = new Map<string, number>();
     for (const tx of monthTx) {
-      const key = tx.merchant_name.split(" · ")[0];
+      const key = tx.merchant_name.split(" · ")[0] ?? tx.merchant_name;
       merchantMap.set(key, (merchantMap.get(key) ?? 0) + convert(Number(tx.amount), tx.currency, base));
     }
     const merchants = [...merchantMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);

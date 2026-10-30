@@ -127,7 +127,7 @@ function Transactions() {
         {groups.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">{t("tx.empty")}</p>}
         {groups.map(([day, txs]) => (
           <section key={day}>
-            <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{dayLabel(txs[0].occurred_at)}</h2>
+            <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{dayLabel(txs[0]?.occurred_at ?? day)}</h2>
             <ul className="divide-y divide-border">
               {txs.map((tx) => (
                 <TransactionRow key={tx.id} tx={tx} account={accounts.find((a) => a.id === tx.account_id)} />

@@ -25,7 +25,7 @@ export function ShariahBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-export function TransactionRow({ tx, account }: { tx: Transaction; account?: Account }) {
+export function TransactionRow({ tx, account }: { tx: Transaction; account?: Account | undefined }) {
   const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const toggle = useToggleShariah();

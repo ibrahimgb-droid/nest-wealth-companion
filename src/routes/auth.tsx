@@ -11,8 +11,8 @@ import { Segmented } from "@/components/segmented";
 type Mode = "signin" | "signup";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (s: Record<string, unknown>): { mode?: Mode } => ({
-    mode: s.mode === "signup" ? "signup" : s.mode === "signin" ? "signin" : undefined,
+  validateSearch: (s: Record<string, unknown>): { mode?: Mode | undefined } => ({
+    mode: s["mode"] === "signup" ? "signup" : s["mode"] === "signin" ? "signin" : undefined,
   }),
   head: () => ({
     meta: [
