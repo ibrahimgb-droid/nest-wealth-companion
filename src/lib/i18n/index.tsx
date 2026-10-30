@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, type Context, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { en, type MessageKey } from "./en";
 import { ar } from "./ar";
 
@@ -21,8 +21,8 @@ interface I18nValue {
 
 // Hot reloads re-run this module; reuse the same context object so the
 // provider already mounted in the root and the pages keep matching.
-const I18nContext: React.Context<I18nValue | null> =
-  (import.meta.hot?.data["i18nContext"] as React.Context<I18nValue | null> | undefined) ??
+const I18nContext: Context<I18nValue | null> =
+  (import.meta.hot?.data["i18nContext"] as Context<I18nValue | null> | undefined) ??
   createContext<I18nValue | null>(null);
 if (import.meta.hot) import.meta.hot.data["i18nContext"] = I18nContext;
 
