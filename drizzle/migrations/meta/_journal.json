@@ -15,6 +15,13 @@
       "when": 1793353036516,
       "tag": "0001_onboarding_and_account_types",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793354938377,
+      "tag": "0002_credit_payments_loans_transfers",
+      "breakpoints": true
     }
   ]
 }
