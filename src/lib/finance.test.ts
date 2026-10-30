@@ -94,8 +94,15 @@ describe("receipt split", () => {
     expect(lines.reduce((s, l) => s + l.price, 0)).toBeCloseTo(10, 5);
   });
   it("uses 3 decimals for KWD receipts", () => {
-    const lines = allocateReceipt([{ name: "A", price: 1, category: "dining" }, { name: "B", price: 2, category: "dining" }], 1.0)
-    expect(lines.map((l) => l.price)).toEqual([0.333, 0.667].map((v) => v));
+    const lines = allocateReceipt(
+      [
+        { name: "A", price: 1, category: "dining" },
+        { name: "B", price: 2, category: "dining" },
+      ],
+      1,
+      3,
+    );
+    expect(lines.map((l) => l.price)).toEqual([0.333, 0.667]);
   });
   it("groups lines into one expense per category", () => {
     const groups = groupReceipt([
