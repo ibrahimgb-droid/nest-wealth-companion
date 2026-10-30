@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { convert } from "./currency";
-import { accountKind, allocateReceipt, checkSpend, groupReceipt, openingBalance, paymentMethodFor, pensionEstimate, safeToSpend } from "./finance";
+import {
+  accountKind,
+  allocateReceipt,
+  applyToBalance,
+  canSpendFrom,
+  checkSpend,
+  groupReceipt,
+  openingBalance,
+  outstanding,
+  paymentMethodFor,
+  pensionEstimate,
+  safeToSpend,
+  spendByCategory,
+  transferLegs,
+} from "./finance";
 
 describe("currency pegs", () => {
   it("converts 3.75 SAR to 3.6725 AED (both pegged to 1 USD)", () => {
@@ -60,14 +74,94 @@ describe("accounts", () => {
     expect(openingBalance("cash", 300)).toBe(300);
     expect(openingBalance("bank", 5000)).toBe(5000);
   });
-  it("records cash-wallet expenses as paid in cash and card/bank as card", () => {
+  it("records cash expenses as cash, credit card expenses as credit and bank as card", () => {
     expect(paymentMethodFor("cash")).toBe("cash");
-    expect(paymentMethodFor("credit")).toBe("card");
+    expect(paymentMethodFor("credit")).toBe("credit");
+    expect(paymentMethodFor("card")).toBe("credit");
     expect(paymentMethodFor("bank")).toBe("card");
   });
   it("treats older card accounts as credit and current accounts as bank", () => {
     expect(accountKind("card")).toBe("credit");
     expect(accountKind("current")).toBe("bank");
+  });
+});
+
+describe("loans", () => {
+  it("stores money you lent as a positive balance (owed to you)", () => {
+    expect(openingBalance("lent", 500)).toBe(500);
+  });
+  it("stores money you borrowed as a negative balance (you owe)", () => {
+    expect(openingBalance("borrowed", 2000)).toBe(-2000);
+  });
+  it("loan accounts cannot pay for expenses", () => {
+    expect(canSpendFrom("lent")).toBe(false);
+    expect(canSpendFrom("borrowed")).toBe(false);
+    expect(canSpendFrom("credit")).toBe(true);
+  });
+  it("repaying 800 of a 2000 loan from the bank leaves 1200 owed", () => {
+    const [out, into] = transferLegs({
+      from: { id: "bank", currency: "AED" },
+      to: { id: "loan", currency: "AED" },
+      amount: 800,
+      transferId: "t1",
+      occurredAt: "2026-10-30T10:00:00Z",
+      fromLabel: "Bank",
+      toLabel: "Ahmed",
+    });
+    expect(outstanding(applyToBalance(-2000, into!))).toBe(1200);
+    expect(applyToBalance(5000, out!)).toBe(4200);
+  });
+});
+
+describe("transfers", () => {
+  const legs = (amount: number, toCurrency = "AED", received?: number) =>
+    transferLegs({
+      from: { id: "bank", currency: "AED" },
+      to: { id: "card", currency: toCurrency },
+      amount,
+      ...(received != null ? { received } : {}),
+      transferId: "t1",
+      occurredAt: "2026-10-30T10:00:00Z",
+      fromLabel: "Bank",
+      toLabel: "Card",
+    });
+  it("paying 500 towards a card owing 1395.56 leaves 895.56 owed", () => {
+    const [, into] = legs(500);
+    expect(outstanding(applyToBalance(-1395.56, into!))).toBeCloseTo(895.56, 2);
+  });
+  it("takes the amount out of one account and puts it into the other", () => {
+    const [out, into] = legs(500);
+    expect([out?.direction, out?.account_id, out?.amount]).toEqual(["debit", "bank", 500]);
+    expect([into?.direction, into?.account_id, into?.amount]).toEqual(["credit", "card", 500]);
+    expect(out?.transfer_id).toBe(into?.transfer_id);
+  });
+  it("converts across currencies at the peg unless the received amount is given", () => {
+    expect(legs(367.25, "SAR")[1]?.amount).toBeCloseTo(375, 2);
+    expect(legs(100, "SAR", 101)[1]?.amount).toBe(101);
+  });
+  it("refuses a transfer into the same account", () => {
+    expect(() =>
+      transferLegs({
+        from: { id: "a", currency: "AED" },
+        to: { id: "a", currency: "AED" },
+        amount: 10,
+        transferId: "t",
+        occurredAt: "",
+        fromLabel: "",
+        toLabel: "",
+      }),
+    ).toThrow();
+  });
+  it("transfers and card payments do not count as spending", () => {
+    const now = new Date().toISOString();
+    const spend = spendByCategory(
+      [
+        { amount: 40, currency: "AED", direction: "debit", category: "dining", occurred_at: now },
+        { amount: 500, currency: "AED", direction: "debit", category: "transfer", occurred_at: now, transfer_id: "t1" },
+      ],
+      "AED",
+    );
+    expect(spend).toEqual({ dining: 40 });
   });
 });
 
