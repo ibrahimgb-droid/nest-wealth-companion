@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
@@ -61,13 +62,26 @@ export const budgetsQuery = queryOptions({
 
 export const allFinanceQueries = [profileQuery, accountsQuery, transactionsQuery, budgetsQuery] as const;
 
-export function ensureFinanceData(qc: import("@tanstack/react-query").QueryClient) {
-  return Promise.all([
+/** Loads everything a signed-in page needs; sends users who haven't finished setup to onboarding. */
+export async function ensureFinanceData(qc: import("@tanstack/react-query").QueryClient) {
+  const [profile] = await Promise.all([
     qc.ensureQueryData(profileQuery),
     qc.ensureQueryData(accountsQuery),
     qc.ensureQueryData(transactionsQuery),
     qc.ensureQueryData(budgetsQuery),
   ]);
+  if (!profile.onboarded_at) throw redirect({ to: "/onboarding" });
+}
+
+/** Onboarding needs the full cache too (sheets read it) but must not redirect to itself. */
+export async function ensureOnboardingData(qc: import("@tanstack/react-query").QueryClient) {
+  const [profile] = await Promise.all([
+    qc.ensureQueryData(profileQuery),
+    qc.ensureQueryData(accountsQuery),
+    qc.ensureQueryData(transactionsQuery),
+    qc.ensureQueryData(budgetsQuery),
+  ]);
+  if (profile.onboarded_at) throw redirect({ to: "/dashboard" });
 }
 
 export function useFinance() {
@@ -174,5 +188,51 @@ export function useDeleteBudget() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: budgetsQuery.queryKey }),
+  });
+}
+
+export function useAddAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: Omit<TablesInsert<"accounts">, "user_id">) => {
+      const user_id = await uid();
+      const { data, error } = await supabase
+        .from("accounts")
+        .insert({ ...row, user_id })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (account) => {
+      const prev = qc.getQueryData(accountsQuery.queryKey);
+      if (prev) qc.setQueryData(accountsQuery.queryKey, [...prev, account]);
+      qc.invalidateQueries({ queryKey: accountsQuery.queryKey });
+    },
+  });
+}
+
+export function useUpdateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Pick<TablesUpdate<"accounts">, "name" | "institution"> }) => {
+      const { error } = await supabase.from("accounts").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: accountsQuery.queryKey }),
+  });
+}
+
+export function useDeleteAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("accounts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: accountsQuery.queryKey });
+      qc.invalidateQueries({ queryKey: transactionsQuery.queryKey });
+    },
   });
 }

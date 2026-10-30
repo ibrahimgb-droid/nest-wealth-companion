@@ -143,3 +143,77 @@ export const COUNTRY_CURRENCY: Record<PensionCountry, "AED" | "SAR" | "KWD"> = {
   SA: "SAR",
   KW: "KWD",
 };
+
+// ---------------------------------------------------------------------------
+// Accounts: every expense comes from a cash wallet, bank account or credit card.
+
+export type AccountKind = "cash" | "bank" | "credit";
+export const ACCOUNT_KINDS: AccountKind[] = ["cash", "bank", "credit"];
+
+/** Older account types map onto the three kinds the app offers. */
+export function accountKind(type: string): AccountKind {
+  if (type === "cash") return "cash";
+  if (type === "credit" || type === "card") return "credit";
+  return "bank";
+}
+
+/** How an expense from this account was paid. */
+export function paymentMethodFor(type: string): "cash" | "card" {
+  return accountKind(type) === "cash" ? "cash" : "card";
+}
+
+/**
+ * Starting balance stored for a new account. For credit cards the user enters
+ * what they currently owe, which is stored as a negative balance.
+ */
+export function openingBalance(kind: AccountKind, entered: number): number {
+  const v = Math.abs(Number.isFinite(entered) ? entered : 0);
+  return kind === "credit" ? -v : v;
+}
+
+export const CURRENCY_COUNTRY: Record<"AED" | "SAR" | "KWD", PensionCountry> = { AED: "AE", SAR: "SA", KWD: "KW" };
+
+// ---------------------------------------------------------------------------
+// Receipts: line items are split into one expense per category.
+
+export interface ReceiptLine {
+  name: string;
+  price: number;
+  category: string;
+}
+
+function roundTo(v: number, decimals: number) {
+  const f = 10 ** decimals;
+  return Math.round(v * f) / f;
+}
+
+/**
+ * Spread VAT, service charges or discounts over the line items so that the
+ * items add up exactly to the total paid. Any rounding remainder goes to the
+ * most expensive item.
+ */
+export function allocateReceipt(items: ReceiptLine[], total: number, decimals = 2): ReceiptLine[] {
+  const clean = items.filter((i) => Number.isFinite(i.price) && i.price > 0);
+  const sum = clean.reduce((s, i) => s + i.price, 0);
+  if (clean.length === 0 || sum <= 0 || !(total > 0)) return clean.map((i) => ({ ...i, price: roundTo(i.price, decimals) }));
+  const scaled = clean.map((i) => ({ ...i, price: roundTo((i.price / sum) * total, decimals) }));
+  const diff = roundTo(total - scaled.reduce((s, i) => s + i.price, 0), decimals);
+  if (diff !== 0) {
+    let max = 0;
+    scaled.forEach((i, idx) => {
+      if (i.price > (scaled[max]?.price ?? 0)) max = idx;
+    });
+    const target = scaled[max];
+    if (target) target.price = roundTo(target.price + diff, decimals);
+  }
+  return scaled;
+}
+
+/** Group receipt lines by category, largest first. */
+export function groupReceipt(items: ReceiptLine[], decimals = 2) {
+  const map = new Map<string, ReceiptLine[]>();
+  for (const i of items) map.set(i.category, [...(map.get(i.category) ?? []), i]);
+  return [...map.entries()]
+    .map(([category, lines]) => ({ category, lines, amount: roundTo(lines.reduce((s, l) => s + l.price, 0), decimals) }))
+    .sort((a, b) => b.amount - a.amount);
+}

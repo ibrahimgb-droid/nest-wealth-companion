@@ -1,12 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
-import { Building2, Landmark, Send, Sparkles } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, Landmark, Plus, ReceiptText, ScanLine, Send, Sparkles } from "lucide-react";
 import heroImg from "@/assets/hero-pattern.jpg";
 import { AppShell, Card, SectionTitle } from "@/components/app-shell";
+import { AccountBalance, AccountIcon, AccountSheet } from "@/components/accounts";
 import { PageLoader } from "@/components/page-loader";
+import { QuickAddSheet } from "@/components/quick-add-sheet";
+import { ReceiptSheet } from "@/components/receipt-sheet";
 import { Segmented } from "@/components/segmented";
 import { TransactionRow } from "@/components/transaction-row";
-import { ensureFinanceData, useFinance, useUpdateProfile } from "@/lib/data";
+import { ensureFinanceData, useFinance, useUpdateProfile, type Account } from "@/lib/data";
 import { convert, formatMoney } from "@/lib/currency";
 import {
   COUNTRY_CURRENCY,
@@ -20,6 +23,9 @@ import {
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  validateSearch: (s: Record<string, unknown>): { scan?: boolean | undefined } => ({
+    scan: s["scan"] === true || s["scan"] === "true" ? true : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Dashboard — Thara" },
@@ -41,7 +47,19 @@ function Dashboard() {
   const { t, locale } = useI18n();
   const { profile, accounts, transactions, budgets } = useFinance();
   const updateProfile = useUpdateProfile();
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [accountSheet, setAccountSheet] = useState<{ open: boolean; account: Account | null }>({ open: false, account: null });
   const base = profile.base_currency;
+
+  // Arriving from onboarding with "Scan my first receipt" opens the scanner straight away.
+  useEffect(() => {
+    if (!search.scan) return;
+    setReceiptOpen(true);
+    void navigate({ to: "/dashboard", search: {}, replace: true });
+  }, [search.scan, navigate]);
   const isExpat = profile.user_type === "expat";
 
   const hour = new Date().getHours();
@@ -116,6 +134,73 @@ function Dashboard() {
           </ul>
         </div>
       </section>
+
+      {/* Quick actions */}
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setReceiptOpen(true)}
+          className="flex flex-col items-start gap-3 rounded-3xl bg-gradient-gold p-4 text-start text-gold-foreground shadow-gold active:scale-[0.98]"
+        >
+          <ScanLine className="size-6" />
+          <span>
+            <span className="block font-bold">{t("dash.scanTitle")}</span>
+            <span className="block text-xs opacity-75">{t("dash.scanHint")}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setQuickOpen(true)}
+          className="flex flex-col items-start gap-3 rounded-3xl border border-gold/30 bg-card p-4 text-start shadow-card active:scale-[0.98]"
+        >
+          <ReceiptText className="size-6 text-gold" />
+          <span>
+            <span className="block font-bold">{t("tx.addCash")}</span>
+            <span className="block text-xs text-muted-foreground">{t("dash.addHint")}</span>
+          </span>
+        </button>
+      </div>
+
+      {/* Accounts */}
+      <Card className="mt-5">
+        <SectionTitle
+          action={
+            <button
+              type="button"
+              onClick={() => setAccountSheet({ open: true, account: null })}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-gold"
+            >
+              <Plus className="size-3.5" /> {t("acct.add")}
+            </button>
+          }
+        >
+          {t("acct.title")}
+        </SectionTitle>
+        {accounts.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">{t("acct.empty")}</p>
+        ) : (
+          <ul className="-mx-1 divide-y divide-border">
+            {accounts.map((a) => (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  onClick={() => setAccountSheet({ open: true, account: a })}
+                  className="flex w-full items-center gap-3 px-1 py-3 text-start"
+                >
+                  <AccountIcon type={a.account_type} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{a.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {[a.institution, a.currency].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <AccountBalance account={a} className="text-sm" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* Safe to spend */}
       <Card className="mt-5">
@@ -267,12 +352,32 @@ function Dashboard() {
         >
           {t("dash.recent")}
         </SectionTitle>
-        <ul className="divide-y divide-border">
-          {transactions.slice(0, 5).map((tx) => (
-            <TransactionRow key={tx.id} tx={tx} account={accounts.find((a) => a.id === tx.account_id)} />
-          ))}
-        </ul>
+        {transactions.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => setReceiptOpen(true)}
+            className="flex w-full flex-col items-center gap-2 rounded-3xl border border-dashed border-gold/40 px-6 py-8 text-center text-sm text-muted-foreground"
+          >
+            <ScanLine className="size-6 text-gold" />
+            {t("dash.noActivity")}
+          </button>
+        ) : (
+          <ul className="divide-y divide-border">
+            {transactions.slice(0, 5).map((tx) => (
+              <TransactionRow key={tx.id} tx={tx} account={accounts.find((a) => a.id === tx.account_id)} />
+            ))}
+          </ul>
+        )}
       </div>
+
+      <ReceiptSheet open={receiptOpen} onOpenChange={setReceiptOpen} />
+      <QuickAddSheet open={quickOpen} onOpenChange={setQuickOpen} />
+      <AccountSheet
+        open={accountSheet.open}
+        onOpenChange={(open) => setAccountSheet((s) => ({ ...s, open }))}
+        account={accountSheet.account}
+        defaultCurrency={base}
+      />
     </AppShell>
   );
 }
