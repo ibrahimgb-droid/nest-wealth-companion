@@ -1,15 +1,27 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Banknote, CreditCard, Landmark, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Banknote, CreditCard, HandCoins, Handshake, Landmark, Loader2, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
-import { useAddAccount, useDeleteAccount, useUpdateAccount, type Account } from "@/lib/data";
+import { useAddAccount, useAddTransactions, useDeleteAccount, useFinance, useUpdateAccount, type Account } from "@/lib/data";
 import { GCC_CURRENCIES, formatMoney, type GccCurrency } from "@/lib/currency";
-import { ACCOUNT_KINDS, CURRENCY_COUNTRY, accountKind, openingBalance, type AccountKind } from "@/lib/finance";
+import {
+  CURRENCY_COUNTRY,
+  LOAN_KINDS,
+  SPEND_KINDS,
+  accountKind,
+  canSpendFrom,
+  isLoan,
+  openingBalance,
+  outstanding,
+  transferLegs,
+  type AccountKind,
+} from "@/lib/finance";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Segmented } from "./segmented";
+import type { TransferPreset } from "./transfer-sheet";
 
-const KIND_ICON = { cash: Banknote, bank: Landmark, credit: CreditCard } as const;
+const KIND_ICON = { cash: Banknote, bank: Landmark, credit: CreditCard, lent: HandCoins, borrowed: Handshake } as const;
 
 const field = "w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold";
 
@@ -28,23 +40,32 @@ export function AccountIcon({ type, size = "md", className }: { type: string; si
   );
 }
 
-/** Balance as the user thinks of it: credit cards show what is owed. */
+/** Balance as the user thinks of it: cards and borrowed money show what is owed, lent money what is owed to you. */
 export function AccountBalance({ account, className }: { account: Account; className?: string }) {
   const { t, locale } = useI18n();
   const bal = Number(account.balance);
-  const credit = accountKind(account.account_type) === "credit";
+  const kind = accountKind(account.account_type);
+  let prefix: string | null = null;
+  let shown = bal;
+  if ((kind === "credit" || kind === "borrowed") && bal < 0) {
+    prefix = kind === "credit" ? t("acct.owedShort") : t("acct.youOweShort");
+    shown = -bal;
+  } else if (kind === "lent" && bal > 0) {
+    prefix = t("acct.owesYouShort");
+  }
   return (
     <span className={cn("font-bold whitespace-nowrap tabular-nums", className)}>
-      {credit && bal < 0 ? (
-        <>
-          <span className="me-1 text-xs font-medium text-muted-foreground">{t("acct.owedShort")}</span>
-          {formatMoney(-bal, account.currency, locale)}
-        </>
-      ) : (
-        formatMoney(bal, account.currency, locale)
-      )}
+      {prefix && <span className="me-1 text-xs font-medium text-muted-foreground">{prefix}</span>}
+      {formatMoney(shown, account.currency, locale)}
     </span>
   );
+}
+
+/** Second line under an account name: bank or loan type, plus currency. */
+export function accountSubtitle(a: Account, t: ReturnType<typeof useI18n>["t"]) {
+  const kind = accountKind(a.account_type);
+  const label = a.institution ?? (isLoan(a.account_type) ? t(`acct.kind.${kind}`) : null);
+  return [label, a.currency].filter(Boolean).join(" · ");
 }
 
 export function AccountPicker({
@@ -84,47 +105,102 @@ export function AccountPicker({
   );
 }
 
+function KindButton({ kind, active, onClick }: { kind: AccountKind; active: boolean; onClick: () => void }) {
+  const { t } = useI18n();
+  const Icon = KIND_ICON[kind];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-start gap-2 rounded-2xl border p-3 text-start transition-colors",
+        active ? "border-gold bg-gold-soft" : "border-border bg-surface",
+      )}
+    >
+      <Icon className={cn("size-5", active ? "text-gold" : "text-muted-foreground")} strokeWidth={1.75} />
+      <span>
+        <span className="block text-xs font-bold">{t(`acct.kind.${kind}`)}</span>
+        <span className="block text-[10px] leading-tight text-muted-foreground">{t(`acct.hint.${kind}`)}</span>
+      </span>
+    </button>
+  );
+}
+
 export function AccountForm({
   defaultCurrency,
   lockCurrency = false,
+  allowLoans = true,
   onSaved,
   submitLabel,
 }: {
   defaultCurrency: string;
   lockCurrency?: boolean;
+  allowLoans?: boolean;
   onSaved?: (account: Account) => void;
   submitLabel?: string;
 }) {
   const { t } = useI18n();
+  const { accounts } = useFinance();
   const add = useAddAccount();
+  const addTx = useAddTransactions();
   const [kind, setKind] = useState<AccountKind>("cash");
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
   const [currency, setCurrency] = useState<GccCurrency>(defaultCurrency as GccCurrency);
   const [balance, setBalance] = useState("");
+  const [linkId, setLinkId] = useState<string | null>(null);
 
   useEffect(() => setCurrency(defaultCurrency as GccCurrency), [defaultCurrency]);
 
+  const loan = kind === "lent" || kind === "borrowed";
+  // Loans can move the money from/into one of your accounts in the same currency.
+  const linkable = loan ? accounts.filter((a) => canSpendFrom(a.account_type) && a.currency === currency) : [];
+  const link = linkable.find((a) => a.id === linkId) ?? null;
+
   async function save() {
     const entered = Number(balance.replace(",", ".").replace(/[^\d.]/g, "")) || 0;
+    const finalName = name.trim() || t(`acct.default.${kind}`);
     try {
       const account = await add.mutateAsync({
-        name: name.trim() || t(`acct.default.${kind}`),
-        institution: kind === "cash" ? null : institution.trim() || null,
+        name: finalName,
+        institution: kind === "bank" || kind === "credit" ? institution.trim() || null : null,
         account_type: kind,
         currency,
         country: CURRENCY_COUNTRY[currency],
-        balance: openingBalance(kind, entered),
+        balance: link && entered > 0 ? 0 : openingBalance(kind, entered),
       });
+      if (link && entered > 0) {
+        const lent = kind === "lent";
+        const label = t(`acct.loanLabel.${kind}` as "acct.loanLabel.lent", { name: finalName });
+        await addTx.mutateAsync(
+          transferLegs({
+            from: lent ? link : account,
+            to: lent ? account : link,
+            amount: entered,
+            transferId: crypto.randomUUID(),
+            occurredAt: new Date().toISOString(),
+            // Name on the "from" row describes where the money went, and vice versa.
+            toLabel: lent ? label : t("xfer.toName", { name: link.name }),
+            fromLabel: lent ? t("xfer.fromName", { name: link.name }) : label,
+          }),
+        );
+      }
       toast.success(t("acct.saved"));
       setName("");
       setInstitution("");
       setBalance("");
+      setLinkId(null);
       onSaved?.(account);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     }
   }
+
+  const pending = add.isPending || addTx.isPending;
+  const balanceLabel =
+    kind === "credit" ? t("acct.owed") : kind === "lent" ? t("acct.loanLent") : kind === "borrowed" ? t("acct.loanBorrowed") : t("acct.balance");
 
   return (
     <form
@@ -134,40 +210,32 @@ export function AccountForm({
         void save();
       }}
     >
-      <div role="radiogroup" className="grid grid-cols-3 gap-2">
-        {ACCOUNT_KINDS.map((k) => {
-          const Icon = KIND_ICON[k];
-          const active = k === kind;
-          return (
-            <button
-              key={k}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setKind(k)}
-              className={cn(
-                "flex flex-col items-start gap-2 rounded-2xl border p-3 text-start transition-colors",
-                active ? "border-gold bg-gold-soft" : "border-border bg-surface",
-              )}
-            >
-              <Icon className={cn("size-5", active ? "text-gold" : "text-muted-foreground")} strokeWidth={1.75} />
-              <span>
-                <span className="block text-xs font-bold">{t(`acct.kind.${k}`)}</span>
-                <span className="block text-[10px] leading-tight text-muted-foreground">{t(`acct.hint.${k}`)}</span>
-              </span>
-            </button>
-          );
-        })}
+      <div role="radiogroup" className="space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          {SPEND_KINDS.map((k) => (
+            <KindButton key={k} kind={k} active={k === kind} onClick={() => setKind(k)} />
+          ))}
+        </div>
+        {allowLoans && (
+          <>
+            <p className="pt-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{t("acct.loans")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {LOAN_KINDS.map((k) => (
+                <KindButton key={k} kind={k} active={k === kind} onClick={() => setKind(k)} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <input
         className={field}
-        aria-label={t("acct.name")}
-        placeholder={t(`acct.default.${kind}`)}
+        aria-label={loan ? t("acct.person") : t("acct.name")}
+        placeholder={loan ? t("acct.person") : t(`acct.default.${kind}`)}
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      {kind !== "cash" && (
+      {(kind === "bank" || kind === "credit") && (
         <input
           className={field}
           aria-label={t("acct.institution")}
@@ -181,13 +249,16 @@ export function AccountForm({
           className="w-full"
           size="sm"
           value={currency}
-          onChange={setCurrency}
+          onChange={(c) => {
+            setCurrency(c);
+            setLinkId(null);
+          }}
           options={GCC_CURRENCIES.map((c) => ({ value: c, label: c }))}
         />
       )}
       <label className="block">
         <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          {kind === "credit" ? t("acct.owed") : t("acct.balance")} ({currency})
+          {balanceLabel} ({currency})
         </span>
         <input
           className={field}
@@ -197,12 +268,36 @@ export function AccountForm({
           onChange={(e) => setBalance(e.target.value.replace(/[^\d.,]/g, ""))}
         />
       </label>
+
+      {loan && linkable.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            {kind === "lent" ? t("acct.linkLent") : t("acct.linkBorrowed")}
+          </p>
+          <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={linkId === null}
+              onClick={() => setLinkId(null)}
+              className={cn(
+                "shrink-0 rounded-2xl border px-3 py-2.5 text-sm font-semibold",
+                linkId === null ? "border-gold bg-gold-soft" : "border-border bg-surface text-muted-foreground",
+              )}
+            >
+              {t("acct.linkNone")}
+            </button>
+            <AccountPicker accounts={linkable} value={linkId} onChange={setLinkId} />
+          </div>
+        </div>
+      )}
+
       <button
         type="submit"
-        disabled={add.isPending}
+        disabled={pending}
         className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-emerald disabled:opacity-60"
       >
-        {add.isPending && <Loader2 className="size-4 animate-spin" />}
+        {pending && <Loader2 className="size-4 animate-spin" />}
         {submitLabel ?? t("acct.save")}
       </button>
     </form>
@@ -215,11 +310,14 @@ export function AccountSheet({
   onOpenChange,
   account,
   defaultCurrency,
+  onMoveMoney,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   account?: Account | null;
   defaultCurrency: string;
+  /** Opens the transfer sheet (pay card, loan repayment, transfer). */
+  onMoveMoney?: (preset: TransferPreset) => void;
 }) {
   const { t } = useI18n();
   const update = useUpdateAccount();
@@ -233,6 +331,18 @@ export function AccountSheet({
       setInstitution(account.institution ?? "");
     }
   }, [open, account]);
+
+  const kind = account ? accountKind(account.account_type) : null;
+  const bal = account ? Number(account.balance) : 0;
+  const owed = outstanding(bal);
+
+  const actions: { label: string; preset: TransferPreset; primary?: boolean }[] = [];
+  if (account && onMoveMoney) {
+    if (kind === "credit" && owed > 0) actions.push({ label: t("acct.payCard"), preset: { mode: "pay", toId: account.id, amount: owed }, primary: true });
+    if (kind === "lent" && bal > 0) actions.push({ label: t("acct.gotRepaid"), preset: { mode: "transfer", fromId: account.id, amount: bal }, primary: true });
+    if (kind === "borrowed" && owed > 0) actions.push({ label: t("acct.repay"), preset: { mode: "transfer", toId: account.id, amount: owed }, primary: true });
+    actions.push({ label: t("acct.transfer"), preset: { mode: "transfer", fromId: account.id } });
+  }
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -257,8 +367,29 @@ export function AccountSheet({
                 <span className="flex-1 text-sm font-semibold">{t(`acct.kind.${accountKind(account.account_type)}`)}</span>
                 <AccountBalance account={account} className="text-sm" />
               </div>
+
+              {actions.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {actions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      onClick={() => onMoveMoney?.(a.preset)}
+                      className={cn(
+                        "inline-flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold",
+                        a.primary ? "bg-gradient-gold text-gold-foreground shadow-gold" : "border border-gold/30 bg-surface",
+                        actions.length === 1 && "col-span-2",
+                      )}
+                    >
+                      {!a.primary && <ArrowLeftRight className="size-4 text-gold" />}
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <input className={field} aria-label={t("acct.name")} value={name} onChange={(e) => setName(e.target.value)} />
-              {accountKind(account.account_type) !== "cash" && (
+              {(kind === "bank" || kind === "credit") && (
                 <input
                   className={field}
                   aria-label={t("acct.institution")}
