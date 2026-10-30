@@ -19,7 +19,20 @@ interface I18nValue {
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
 }
 
-const I18nContext = createContext<I18nValue | null>(null);
+// Hot reloads re-run this module; reuse the same context object so the
+// provider already mounted in the root and the pages keep matching.
+const I18nContext: React.Context<I18nValue | null> =
+  (import.meta.hot?.data["i18nContext"] as React.Context<I18nValue | null> | undefined) ??
+  createContext<I18nValue | null>(null);
+if (import.meta.hot) import.meta.hot.data["i18nContext"] = I18nContext;
+
+// Safe fallback (English, no-op setter) so a missing provider never blanks the screen.
+const FALLBACK: I18nValue = {
+  locale: "en",
+  dir: "ltr",
+  setLocale: () => {},
+  t: (key, vars) => translate("en", key, vars),
+};
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
@@ -52,10 +65,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
-export function useI18n() {
-  const ctx = useContext(I18nContext);
-  if (!ctx) throw new Error("useI18n must be used inside I18nProvider");
-  return ctx;
+export function useI18n(): I18nValue {
+  return useContext(I18nContext) ?? FALLBACK;
 }
 
 export type { MessageKey };
