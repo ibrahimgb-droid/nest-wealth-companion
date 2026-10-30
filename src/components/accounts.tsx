@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ArrowLeftRight, Banknote, CreditCard, HandCoins, Handshake, Landmark, Loader2, Trash2 } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
@@ -72,13 +72,17 @@ export function AccountPicker({
   accounts,
   value,
   onChange,
+  leading,
 }: {
   accounts: Account[];
   value: string | null;
   onChange: (id: string) => void;
+  /** Extra option shown before the accounts (e.g. "none"). */
+  leading?: ReactNode;
 }) {
   return (
     <div role="radiogroup" className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+      {leading}
       {accounts.map((a) => {
         const active = a.id === value;
         return (
@@ -274,21 +278,25 @@ export function AccountForm({
           <p className="mb-2 text-xs font-medium text-muted-foreground">
             {kind === "lent" ? t("acct.linkLent") : t("acct.linkBorrowed")}
           </p>
-          <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={linkId === null}
-              onClick={() => setLinkId(null)}
-              className={cn(
-                "shrink-0 rounded-2xl border px-3 py-2.5 text-sm font-semibold",
-                linkId === null ? "border-gold bg-gold-soft" : "border-border bg-surface text-muted-foreground",
-              )}
-            >
-              {t("acct.linkNone")}
-            </button>
-            <AccountPicker accounts={linkable} value={linkId} onChange={setLinkId} />
-          </div>
+          <AccountPicker
+            accounts={linkable}
+            value={linkId}
+            onChange={setLinkId}
+            leading={
+              <button
+                type="button"
+                role="radio"
+                aria-checked={linkId === null}
+                onClick={() => setLinkId(null)}
+                className={cn(
+                  "shrink-0 rounded-2xl border px-3 py-2.5 text-sm font-semibold",
+                  linkId === null ? "border-gold bg-gold-soft" : "border-border bg-surface text-muted-foreground",
+                )}
+              >
+                {t("acct.linkNone")}
+              </button>
+            }
+          />
         </div>
       )}
 
