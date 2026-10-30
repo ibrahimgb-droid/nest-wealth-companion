@@ -50,7 +50,7 @@ function Transactions() {
     });
     const map = new Map<string, Transaction[]>();
     for (const tx of list) {
-      const key = tx.occurred_at.slice(0, 10);
+      const key = format(new Date(tx.occurred_at), "yyyy-MM-dd");
       map.set(key, [...(map.get(key) ?? []), tx]);
     }
     return [...map.entries()];
