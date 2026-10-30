@@ -44,6 +44,7 @@ export interface LedgerTx {
   category: string;
   occurred_at: string;
   shariah_compliant?: boolean;
+  transfer_id?: string | null;
 }
 
 export function monthStart(d = new Date()): Date {
@@ -60,11 +61,11 @@ export function isInMonth(iso: string, ref = new Date()): boolean {
   return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
 }
 
-/** Debit spend per category for the month of `ref`, converted to `base`. */
+/** Debit spend per category for the month of `ref`, converted to `base`. Transfers are not spending. */
 export function spendByCategory(txs: LedgerTx[], base: string, ref = new Date()) {
   const out: Record<string, number> = {};
   for (const t of txs) {
-    if (t.direction !== "debit" || !isInMonth(t.occurred_at, ref)) continue;
+    if (t.direction !== "debit" || isTransfer(t) || !isInMonth(t.occurred_at, ref)) continue;
     out[t.category] = (out[t.category] ?? 0) + convert(Number(t.amount), t.currency, base);
   }
   return out;
@@ -146,32 +147,111 @@ export const COUNTRY_CURRENCY: Record<PensionCountry, "AED" | "SAR" | "KWD"> = {
 
 // ---------------------------------------------------------------------------
 // Accounts: every expense comes from a cash wallet, bank account or credit card.
+// Loan accounts track money lent to someone (they owe you) or borrowed (you owe).
 
-export type AccountKind = "cash" | "bank" | "credit";
-export const ACCOUNT_KINDS: AccountKind[] = ["cash", "bank", "credit"];
+export type AccountKind = "cash" | "bank" | "credit" | "lent" | "borrowed";
+/** Accounts an expense can be paid from. */
+export const SPEND_KINDS = ["cash", "bank", "credit"] as const;
+export const LOAN_KINDS = ["lent", "borrowed"] as const;
+export const ACCOUNT_KINDS: AccountKind[] = [...SPEND_KINDS, ...LOAN_KINDS];
 
-/** Older account types map onto the three kinds the app offers. */
+/** Older account types map onto the kinds the app offers. */
 export function accountKind(type: string): AccountKind {
   if (type === "cash") return "cash";
   if (type === "credit" || type === "card") return "credit";
+  if (type === "lent") return "lent";
+  if (type === "borrowed") return "borrowed";
   return "bank";
 }
 
+export function isLoan(type: string) {
+  const k = accountKind(type);
+  return k === "lent" || k === "borrowed";
+}
+
+/** Only cash, bank and credit card accounts can pay for an expense. */
+export function canSpendFrom(type: string) {
+  return !isLoan(type);
+}
+
 /** How an expense from this account was paid. */
-export function paymentMethodFor(type: string): "cash" | "card" {
-  return accountKind(type) === "cash" ? "cash" : "card";
+export function paymentMethodFor(type: string): "cash" | "card" | "credit" {
+  const k = accountKind(type);
+  if (k === "cash") return "cash";
+  if (k === "credit") return "credit";
+  return "card";
 }
 
 /**
- * Starting balance stored for a new account. For credit cards the user enters
- * what they currently owe, which is stored as a negative balance.
+ * Starting balance stored for a new account. Credit cards and money you
+ * borrowed are what you owe, stored as a negative balance. Money you lent is
+ * owed to you, so it stays positive.
  */
 export function openingBalance(kind: AccountKind, entered: number): number {
   const v = Math.abs(Number.isFinite(entered) ? entered : 0);
-  return kind === "credit" ? -v : v;
+  return kind === "credit" || kind === "borrowed" ? -v : v;
+}
+
+/** What is still owed on a credit card or borrowed loan (0 if nothing). */
+export function outstanding(balance: number) {
+  return balance < 0 ? -balance : 0;
 }
 
 export const CURRENCY_COUNTRY: Record<"AED" | "SAR" | "KWD", PensionCountry> = { AED: "AE", SAR: "SA", KWD: "KW" };
+
+// ---------------------------------------------------------------------------
+// Transfers: money moves out of one account and into another. Paying a credit
+// card, lending or repaying a loan are all transfers, so they are never spending.
+
+export const TRANSFER_CATEGORY = "transfer";
+
+export function isTransfer(tx: { category: string; transfer_id?: string | null }) {
+  return tx.category === TRANSFER_CATEGORY || !!tx.transfer_id;
+}
+
+export interface TransferAccount {
+  id: string;
+  currency: string;
+}
+
+export interface TransferInput {
+  from: TransferAccount;
+  to: TransferAccount;
+  /** Amount leaving `from`, in its currency. */
+  amount: number;
+  /** Amount arriving in `to`, in its currency (defaults to `amount` when currencies match). */
+  received?: number;
+  transferId: string;
+  occurredAt: string;
+  fromLabel: string;
+  toLabel: string;
+  note?: string | null;
+}
+
+/** The two ledger rows of a transfer: a debit on `from` and a credit on `to`. */
+export function transferLegs(input: TransferInput) {
+  const { from, to, amount, transferId, occurredAt } = input;
+  if (from.id === to.id) throw new Error("Pick two different accounts");
+  if (!(amount > 0)) throw new Error("Enter an amount");
+  const received = from.currency === to.currency ? amount : input.received ?? convert(amount, from.currency, to.currency);
+  const shared = {
+    category: TRANSFER_CATEGORY,
+    payment_method: "transfer",
+    shariah_compliant: true,
+    transfer_id: transferId,
+    occurred_at: occurredAt,
+    merchant_raw: input.note?.trim() || null,
+  };
+  return [
+    { ...shared, account_id: from.id, amount, currency: from.currency, direction: "debit", merchant_name: input.toLabel },
+    { ...shared, account_id: to.id, amount: received, currency: to.currency, direction: "credit", merchant_name: input.fromLabel },
+  ];
+}
+
+/** Balance after a ledger row, mirroring the database trigger. */
+export function applyToBalance(balance: number, row: { amount: number; direction: string }) {
+  return balance + (row.direction === "credit" ? row.amount : -row.amount);
+}
 
 // ---------------------------------------------------------------------------
 // Receipts: line items are split into one expense per category.
