@@ -14,13 +14,194 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      accounts: {
+        Row: {
+          account_type: string
+          balance: number
+          country: string
+          created_at: string
+          currency: string
+          id: string
+          institution: string | null
+          is_islamic: boolean
+          name: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string
+          balance?: number
+          country: string
+          created_at?: string
+          currency: string
+          id?: string
+          institution?: string | null
+          is_islamic?: boolean
+          name: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          balance?: number
+          country?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          institution?: string | null
+          is_islamic?: boolean
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      budgets: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          monthly_limit: number
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          monthly_limit?: number
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          monthly_limit?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          base_currency: string
+          budget_mode: string
+          created_at: string
+          display_name: string | null
+          home_country: string | null
+          home_currency: string | null
+          home_wealth_value: number | null
+          id: string
+          locale: string
+          monthly_income: number
+          pension_country: string | null
+          pension_salary: number | null
+          pension_years: number | null
+          real_estate_label: string | null
+          real_estate_value: number | null
+          updated_at: string
+          user_type: string
+        }
+        Insert: {
+          base_currency?: string
+          budget_mode?: string
+          created_at?: string
+          display_name?: string | null
+          home_country?: string | null
+          home_currency?: string | null
+          home_wealth_value?: number | null
+          id: string
+          locale?: string
+          monthly_income?: number
+          pension_country?: string | null
+          pension_salary?: number | null
+          pension_years?: number | null
+          real_estate_label?: string | null
+          real_estate_value?: number | null
+          updated_at?: string
+          user_type?: string
+        }
+        Update: {
+          base_currency?: string
+          budget_mode?: string
+          created_at?: string
+          display_name?: string | null
+          home_country?: string | null
+          home_currency?: string | null
+          home_wealth_value?: number | null
+          id?: string
+          locale?: string
+          monthly_income?: number
+          pension_country?: string | null
+          pension_salary?: number | null
+          pension_years?: number | null
+          real_estate_label?: string | null
+          real_estate_value?: number | null
+          updated_at?: string
+          user_type?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          account_id: string | null
+          amount: number
+          category: string
+          created_at: string
+          currency: string
+          direction: string
+          id: string
+          merchant_name: string
+          merchant_raw: string | null
+          occurred_at: string
+          payment_method: string
+          receipt_id: string | null
+          shariah_compliant: boolean
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          amount: number
+          category: string
+          created_at?: string
+          currency: string
+          direction?: string
+          id?: string
+          merchant_name: string
+          merchant_raw?: string | null
+          occurred_at?: string
+          payment_method?: string
+          receipt_id?: string | null
+          shariah_compliant?: boolean
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          category?: string
+          created_at?: string
+          currency?: string
+          direction?: string
+          id?: string
+          merchant_name?: string
+          merchant_raw?: string | null
+          occurred_at?: string
+          payment_method?: string
+          receipt_id?: string | null
+          shariah_compliant?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      seed_demo_data: { Args: { _uid: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
