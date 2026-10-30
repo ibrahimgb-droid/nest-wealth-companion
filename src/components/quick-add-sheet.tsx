@@ -23,12 +23,11 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setCurrency(profile.base_currency as GccCurrency);
-      setBlocked(null);
-      const id = window.setTimeout(() => inputRef.current?.focus(), 150);
-      return () => window.clearTimeout(id);
-    }
+    if (!open) return undefined;
+    setCurrency(profile.base_currency as GccCurrency);
+    setBlocked(null);
+    const id = window.setTimeout(() => inputRef.current?.focus(), 150);
+    return () => window.clearTimeout(id);
   }, [open, profile.base_currency]);
 
   const catLabel = (c: string) => t(`cat.${c}` as MessageKey);
