@@ -1,34 +1,56 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Banknote, Loader2 } from "lucide-react";
+import { Loader2, ReceiptText } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useAddTransactions, useFinance } from "@/lib/data";
-import { GCC_CURRENCIES, formatMoney, type GccCurrency } from "@/lib/currency";
+import { formatMoney } from "@/lib/currency";
+import { accountKind, paymentMethodFor } from "@/lib/finance";
 import { evaluateSpend } from "@/lib/spend-guard";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { AccountForm, AccountPicker } from "./accounts";
 import { CategoryIcon } from "./category-icon";
 
-const QUICK_CATEGORIES = ["dining", "groceries", "transport", "shopping", "entertainment", "other"] as const;
+const QUICK_CATEGORIES = [
+  "groceries",
+  "dining",
+  "transport",
+  "shopping",
+  "utilities",
+  "health",
+  "entertainment",
+  "housing",
+  "other",
+] as const;
 
 export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t, locale } = useI18n();
   const { profile, accounts, budgets, transactions } = useFinance();
   const add = useAddTransactions();
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<GccCurrency>(profile.base_currency as GccCurrency);
-  const [category, setCategory] = useState<string>("dining");
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [category, setCategory] = useState<string>("groceries");
   const [merchant, setMerchant] = useState("");
   const [blocked, setBlocked] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const account = accounts.find((a) => a.id === accountId) ?? null;
+  const currency = account?.currency ?? profile.base_currency;
+
   useEffect(() => {
     if (!open) return undefined;
-    setCurrency(profile.base_currency as GccCurrency);
     setBlocked(null);
+    setAccountId((current) => {
+      if (current && accounts.some((a) => a.id === current)) return current;
+      const preferred =
+        accounts.find((a) => accountKind(a.account_type) === "cash" && a.currency === profile.base_currency) ??
+        accounts.find((a) => a.currency === profile.base_currency) ??
+        accounts[0];
+      return preferred?.id ?? null;
+    });
     const id = window.setTimeout(() => inputRef.current?.focus(), 150);
     return () => window.clearTimeout(id);
-  }, [open, profile.base_currency]);
+  }, [open, accounts, profile.base_currency]);
 
   const catLabel = (c: string) => t(`cat.${c}` as MessageKey);
 
@@ -38,6 +60,7 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       inputRef.current?.focus();
       return;
     }
+    if (!account) return;
     const check = evaluateSpend(profile, budgets, transactions, category, value, currency);
     if (!check.allowed) {
       const msg = t("quick.blocked", {
@@ -48,20 +71,16 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       toast.error(msg);
       return;
     }
-    const account =
-      accounts.find((a) => a.account_type === "cash" && a.currency === currency) ??
-      accounts.find((a) => a.currency === currency) ??
-      null;
     await add.mutateAsync([
       {
-        account_id: account?.id ?? null,
-        merchant_raw: "CASH",
-        merchant_name: merchant.trim() || t("tx.cash"),
+        account_id: account.id,
+        merchant_raw: null,
+        merchant_name: merchant.trim() || catLabel(category),
         amount: value,
         currency,
         category,
         direction: "debit",
-        payment_method: "cash",
+        payment_method: paymentMethodFor(account.account_type),
         shariah_compliant: true,
         occurred_at: new Date().toISOString(),
       },
@@ -76,91 +95,86 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-w-md">
-        <form
-          className="px-5 pt-3 pb-8"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
+      <DrawerContent className="mx-auto max-h-[92vh] max-w-md">
+        <div className="overflow-y-auto px-5 pt-3 pb-8">
           <DrawerTitle className="mb-4 flex items-center gap-2 text-base font-semibold">
-            <Banknote className="size-5 text-gold" /> {t("quick.title")}
+            <ReceiptText className="size-5 text-gold" /> {t("quick.title")}
           </DrawerTitle>
 
-          <div className="flex items-baseline gap-3 border-b border-border pb-3">
-            <span className="text-lg font-semibold text-gold">{currency}</span>
-            <input
-              ref={inputRef}
-              inputMode="decimal"
-              enterKeyHint="done"
-              placeholder="0.00"
-              aria-label="Amount"
-              value={amount}
-              onChange={(e) => {
-                setBlocked(null);
-                setAmount(e.target.value.replace(/[^\d.,]/g, ""));
+          {accounts.length === 0 ? (
+            <>
+              <p className="mb-4 rounded-2xl bg-gold-soft px-4 py-3 text-sm">{t("quick.noAccounts")}</p>
+              <AccountForm defaultCurrency={profile.base_currency} onSaved={(a) => setAccountId(a.id)} />
+            </>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void save();
               }}
-              className="w-full bg-transparent font-display text-5xl font-medium tracking-tight outline-none placeholder:text-muted-foreground/40"
-            />
-          </div>
+            >
+              <div className="flex items-baseline gap-3 border-b border-border pb-3">
+                <span className="text-lg font-semibold text-gold">{currency}</span>
+                <input
+                  ref={inputRef}
+                  inputMode="decimal"
+                  enterKeyHint="done"
+                  placeholder={currency === "KWD" ? "0.000" : "0.00"}
+                  aria-label="Amount"
+                  value={amount}
+                  onChange={(e) => {
+                    setBlocked(null);
+                    setAmount(e.target.value.replace(/[^\d.,]/g, ""));
+                  }}
+                  className="w-full bg-transparent font-display text-5xl font-medium tracking-tight outline-none placeholder:text-muted-foreground/40"
+                />
+              </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {GCC_CURRENCIES.map((c) => (
+              <p className="mt-4 mb-2 text-xs font-medium text-muted-foreground">{t("quick.from")}</p>
+              <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} />
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {QUICK_CATEGORIES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setBlocked(null);
+                      setCategory(c);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 text-[11px] font-semibold transition-colors",
+                      category === c
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-surface text-muted-foreground",
+                    )}
+                  >
+                    <CategoryIcon category={c} size="sm" />
+                    {catLabel(c)}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                value={merchant}
+                onChange={(e) => setMerchant(e.target.value)}
+                placeholder={t("quick.merchant")}
+                className="mt-4 w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
+              />
+
+              {blocked && <p className="mt-3 rounded-2xl bg-destructive/15 px-4 py-3 text-sm text-destructive">{blocked}</p>}
+
               <button
-                key={c}
-                type="button"
-                onClick={() => setCurrency(c)}
-                className={cn(
-                  "rounded-2xl border py-2.5 text-sm font-bold transition-colors",
-                  currency === c
-                    ? "border-gold bg-gold-soft text-gold"
-                    : "border-border bg-surface text-muted-foreground",
-                )}
+                type="submit"
+                disabled={add.isPending || !account}
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-gold py-4 text-base font-bold text-gold-foreground shadow-gold transition-transform active:scale-[0.98] disabled:opacity-60"
               >
-                {c}
+                {add.isPending && <Loader2 className="size-4 animate-spin" />}
+                {t("quick.save")}
               </button>
-            ))}
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {QUICK_CATEGORIES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => {
-                  setBlocked(null);
-                  setCategory(c);
-                }}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 text-[11px] font-semibold transition-colors",
-                  category === c ? "border-primary bg-primary/10 text-foreground" : "border-border bg-surface text-muted-foreground",
-                )}
-              >
-                <CategoryIcon category={c} size="sm" />
-                {catLabel(c)}
-              </button>
-            ))}
-          </div>
-
-          <input
-            value={merchant}
-            onChange={(e) => setMerchant(e.target.value)}
-            placeholder={t("quick.merchant")}
-            className="mt-4 w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-gold"
-          />
-
-          {blocked && <p className="mt-3 rounded-2xl bg-destructive/15 px-4 py-3 text-sm text-destructive">{blocked}</p>}
-
-          <button
-            type="submit"
-            disabled={add.isPending}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-gold py-4 text-base font-bold text-gold-foreground shadow-gold transition-transform active:scale-[0.98] disabled:opacity-60"
-          >
-            {add.isPending && <Loader2 className="size-4 animate-spin" />}
-            {t("quick.save")}
-          </button>
-        </form>
+            </form>
+          )}
+        </div>
       </DrawerContent>
     </Drawer>
   );
