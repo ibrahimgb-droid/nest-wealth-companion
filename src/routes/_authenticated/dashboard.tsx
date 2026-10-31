@@ -1,14 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Landmark, Plus, ReceiptText, ScanLine, Send, Sparkles } from "lucide-react";
+import { ArrowLeftRight, Building2, CreditCard, Landmark, Plus, ReceiptText, ScanLine, Send, Sparkles } from "lucide-react";
 import heroImg from "@/assets/hero-pattern.jpg";
 import { AppShell, Card, SectionTitle } from "@/components/app-shell";
-import { AccountBalance, AccountIcon, AccountSheet } from "@/components/accounts";
+import { AccountBalance, AccountIcon, AccountSheet, accountSubtitle } from "@/components/accounts";
 import { PageLoader } from "@/components/page-loader";
 import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { ReceiptSheet } from "@/components/receipt-sheet";
 import { Segmented } from "@/components/segmented";
 import { TransactionRow } from "@/components/transaction-row";
+import { TransferSheet, type TransferPreset } from "@/components/transfer-sheet";
 import { ensureFinanceData, useFinance, useUpdateProfile, type Account } from "@/lib/data";
 import { convert, formatMoney } from "@/lib/currency";
 import {
@@ -52,6 +53,13 @@ function Dashboard() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [accountSheet, setAccountSheet] = useState<{ open: boolean; account: Account | null }>({ open: false, account: null });
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferPreset, setTransferPreset] = useState<TransferPreset>({ mode: "transfer" });
+  const openTransfer = (preset: TransferPreset) => {
+    setAccountSheet((s) => ({ ...s, open: false }));
+    setTransferPreset(preset);
+    setTransferOpen(true);
+  };
   const base = profile.base_currency;
 
   // Arriving from onboarding with "Scan my first receipt" opens the scanner straight away.
@@ -159,6 +167,23 @@ function Dashboard() {
             <span className="block text-xs text-muted-foreground">{t("dash.addHint")}</span>
           </span>
         </button>
+        {[
+          { icon: ArrowLeftRight, title: t("dash.transfer"), hint: t("dash.transferHint"), preset: { mode: "transfer" } as const },
+          { icon: CreditCard, title: t("dash.payCard"), hint: t("dash.payCardHint"), preset: { mode: "pay" } as const },
+        ].map(({ icon: Icon, title, hint, preset }) => (
+          <button
+            key={preset.mode}
+            type="button"
+            onClick={() => openTransfer({ ...preset })}
+            className="flex items-center gap-3 rounded-3xl border border-border bg-card px-4 py-3 text-start shadow-card active:scale-[0.98]"
+          >
+            <Icon className="size-5 shrink-0 text-gold" />
+            <span className="min-w-0">
+              <span className="block text-sm font-bold">{title}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Accounts */}
@@ -191,7 +216,7 @@ function Dashboard() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{a.name}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {[a.institution, a.currency].filter(Boolean).join(" · ")}
+                      {accountSubtitle(a, t)}
                     </span>
                   </span>
                   <AccountBalance account={a} className="text-sm" />
@@ -377,7 +402,9 @@ function Dashboard() {
         onOpenChange={(open) => setAccountSheet((s) => ({ ...s, open }))}
         account={accountSheet.account}
         defaultCurrency={base}
+        onMoveMoney={openTransfer}
       />
+      <TransferSheet open={transferOpen} onOpenChange={setTransferOpen} preset={transferPreset} />
     </AppShell>
   );
 }

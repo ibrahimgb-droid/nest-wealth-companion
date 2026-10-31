@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, Plus, ScanLine } from "lucide-react";
 import { toast } from "sonner";
-import { AccountBalance, AccountForm, AccountIcon } from "@/components/accounts";
+import { AccountBalance, AccountForm, AccountIcon, accountSubtitle } from "@/components/accounts";
 import { PageLoader } from "@/components/page-loader";
 import { Segmented } from "@/components/segmented";
 import { ensureOnboardingData, useFinance, useUpdateProfile } from "@/lib/data";
@@ -213,7 +213,7 @@ function Onboarding() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{a.name}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {[a.institution, a.currency].filter(Boolean).join(" · ")}
+                        {accountSubtitle(a, t)}
                       </span>
                     </span>
                     <AccountBalance account={a} className="text-sm" />

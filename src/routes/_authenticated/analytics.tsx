@@ -8,7 +8,7 @@ import { AppShell, Card, SectionTitle } from "@/components/app-shell";
 import { PageLoader } from "@/components/page-loader";
 import { ensureFinanceData, useFinance } from "@/lib/data";
 import { convert, formatMoney } from "@/lib/currency";
-import { isInMonth, spendByCategory } from "@/lib/finance";
+import { isInMonth, isTransfer, spendByCategory } from "@/lib/finance";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
