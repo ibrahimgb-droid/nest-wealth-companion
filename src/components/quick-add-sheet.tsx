@@ -97,8 +97,8 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-h-[92vh] max-w-md">
-        <div className="overflow-y-auto px-5 pt-3 pb-8">
+      <DrawerContent className="mx-auto max-h-[92dvh] max-w-md">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 pb-[calc(2rem+env(safe-area-inset-bottom))]">
           <DrawerTitle className="mb-4 flex items-center gap-2 text-base font-semibold">
             <ReceiptText className="size-5 text-gold" /> {t("quick.title")}
           </DrawerTitle>
