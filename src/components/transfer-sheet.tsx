@@ -137,8 +137,8 @@ export function TransferSheet({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-h-[92vh] max-w-md">
-        <div className="overflow-y-auto px-5 pt-3 pb-8">
+      <DrawerContent className="mx-auto max-h-[92dvh] max-w-md">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 pb-[calc(2rem+env(safe-area-inset-bottom))]">
           <DrawerTitle className="mb-4 flex items-center gap-2 text-base font-semibold">
             {pay ? <CreditCard className="size-5 text-gold" /> : <ArrowLeftRight className="size-5 text-gold" />}
             {pay ? t("xfer.payTitle") : t("xfer.title")}

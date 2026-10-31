@@ -354,8 +354,8 @@ export function AccountSheet({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="mx-auto max-h-[92vh] max-w-md">
-        <div className="overflow-y-auto px-5 pt-3 pb-8">
+      <DrawerContent className="mx-auto max-h-[92dvh] max-w-md">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 pb-[calc(2rem+env(safe-area-inset-bottom))]">
           <DrawerTitle className="mb-4 text-base font-semibold">{account ? t("acct.edit") : t("acct.add")}</DrawerTitle>
           {account ? (
             <form
