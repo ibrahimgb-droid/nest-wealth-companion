@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Camera, Check, ImageUp, Loader2, RotateCcw, ScanLine } from "lucide-react";
+import { Camera, Check, FileText, ImageUp, Loader2, RotateCcw, ScanLine } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useAddTransactions, useFinance } from "@/lib/data";
 import { GCC_CURRENCIES, decimalsFor, formatMoney, type GccCurrency } from "@/lib/currency";
-import { accountKind, allocateReceipt, groupReceipt, paymentMethodFor } from "@/lib/finance";
-import { photoToDataUrl } from "@/lib/image";
+import { accountKind, allocateReceipt, canSpendFrom, groupReceipt, paymentMethodFor } from "@/lib/finance";
+import { MAX_PDF_BYTES, isPdf, pdfToDataUrl, photoToDataUrl } from "@/lib/image";
 import { scanReceipt } from "@/lib/receipt.functions";
 import type { ScannedReceipt } from "@/lib/receipt-types";
 import { evaluateSpend } from "@/lib/spend-guard";
@@ -37,6 +37,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const [stage, setStage] = useState<Stage>("pick");
   const [preview, setPreview] = useState<string | null>(null);
+  const [pdfName, setPdfName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ScannedReceipt | null>(null);
   const [merchant, setMerchant] = useState("");
@@ -45,7 +46,8 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
   const [addingAccount, setAddingAccount] = useState(false);
 
   const catLabel = (c: string) => t(`cat.${c}` as MessageKey);
-  const matching = accounts.filter((a) => a.currency === currency);
+  const spendable = accounts.filter((a) => canSpendFrom(a.account_type));
+  const matching = spendable.filter((a) => a.currency === currency);
   const account = matching.find((a) => a.id === accountId) ?? null;
 
   const groups = useMemo(() => {
@@ -59,13 +61,14 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
   function reset() {
     setStage("pick");
     setPreview(null);
+    setPdfName(null);
     setError(null);
     setReceipt(null);
     setAddingAccount(false);
   }
 
   function pickAccount(cur: string) {
-    const list = accounts.filter((a) => a.currency === cur);
+    const list = spendable.filter((a) => a.currency === cur);
     const preferred = list.find((a) => accountKind(a.account_type) !== "cash") ?? list[0];
     setAccountId(preferred?.id ?? null);
   }
@@ -73,11 +76,22 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
   async function onFile(file: File | undefined) {
     if (!file) return;
     setError(null);
+    const pdf = isPdf(file);
+    if (pdf && file.size > MAX_PDF_BYTES) {
+      setError(t("receipt.err.tooBig"));
+      return;
+    }
     setStage("reading");
     try {
-      const dataUrl = await photoToDataUrl(file);
-      setPreview(dataUrl);
-      const res = await scan({ data: { image: dataUrl } });
+      let dataUrl: string;
+      if (pdf) {
+        dataUrl = await pdfToDataUrl(file);
+        setPdfName(file.name);
+      } else {
+        dataUrl = await photoToDataUrl(file);
+        setPreview(dataUrl);
+      }
+      const res = await scan({ data: { file: dataUrl } });
       if (!res.ok) {
         setError(t(`receipt.err.${res.reason}`));
         setStage("pick");
@@ -155,7 +169,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
           <input
             ref={galleryRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"
             className="hidden"
             aria-label={t("receipt.upload")}
             onChange={(e) => {
@@ -190,6 +204,12 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
           {stage === "reading" && (
             <div className="relative mt-3 flex min-h-64 items-center justify-center overflow-hidden rounded-3xl border border-dashed border-gold/40 bg-surface">
               {preview && <img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
+              {pdfName && (
+                <span className="absolute inset-x-0 top-8 flex flex-col items-center gap-2 px-6 text-center text-xs text-muted-foreground">
+                  <FileText className="size-10 text-gold" strokeWidth={1.5} />
+                  <span className="max-w-full truncate">{pdfName}</span>
+                </span>
+              )}
               <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-gold shadow-gold animate-scan" />
               <span className="relative inline-flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-semibold">
                 <Loader2 className="size-4 animate-spin text-gold" /> {t("receipt.scanning")}

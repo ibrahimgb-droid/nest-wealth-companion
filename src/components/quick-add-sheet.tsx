@@ -4,7 +4,7 @@ import { Loader2, ReceiptText } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useAddTransactions, useFinance } from "@/lib/data";
 import { formatMoney } from "@/lib/currency";
-import { accountKind, paymentMethodFor } from "@/lib/finance";
+import { accountKind, canSpendFrom, paymentMethodFor } from "@/lib/finance";
 import { evaluateSpend } from "@/lib/spend-guard";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,9 @@ const QUICK_CATEGORIES = [
 
 export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t, locale } = useI18n();
-  const { profile, accounts, budgets, transactions } = useFinance();
+  const { profile, accounts: allAccounts, budgets, transactions } = useFinance();
+  // Loans can't pay for things; expenses come from cash, bank or credit card.
+  const accounts = allAccounts.filter((a) => canSpendFrom(a.account_type));
   const add = useAddTransactions();
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
