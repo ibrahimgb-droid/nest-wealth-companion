@@ -290,7 +290,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
                 )}
               </div>
 
-              <div className="grid grid-cols-[auto_1fr] gap-3">
+              <div className="sticky bottom-0 -mx-5 -mb-[calc(2rem+env(safe-area-inset-bottom))] grid grid-cols-[auto_1fr] gap-3 border-t border-border bg-card px-5 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={reset}
