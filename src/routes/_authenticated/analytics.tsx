@@ -50,7 +50,7 @@ function Analytics() {
       let income = 0;
       let spend = 0;
       for (const tx of transactions) {
-        if (!isInMonth(tx.occurred_at, ref)) continue;
+        if (!isInMonth(tx.occurred_at, ref) || isTransfer(tx)) continue;
         const v = convert(Number(tx.amount), tx.currency, base);
         if (tx.direction === "credit") income += v;
         else spend += v;
@@ -58,7 +58,7 @@ function Analytics() {
       return { label: format(ref, "MMM", { locale: locale === "ar" ? arSA : enUS }), income, spend };
     });
 
-    const monthTx = transactions.filter((tx) => tx.direction === "debit" && isInMonth(tx.occurred_at));
+    const monthTx = transactions.filter((tx) => tx.direction === "debit" && !isTransfer(tx) && isInMonth(tx.occurred_at));
     const compliant = monthTx.filter((tx) => tx.shariah_compliant).reduce((s, tx) => s + convert(Number(tx.amount), tx.currency, base), 0);
     const shariahPct = totalSpend > 0 ? Math.round((compliant / totalSpend) * 100) : 100;
 

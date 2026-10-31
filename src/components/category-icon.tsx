@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   Car,
   Circle,
   Clapperboard,
@@ -34,6 +35,7 @@ const ICONS: Record<string, LucideIcon> = {
   fees: Receipt,
   income: Wallet,
   other: Circle,
+  transfer: ArrowLeftRight,
 };
 
 export function CategoryIcon({
