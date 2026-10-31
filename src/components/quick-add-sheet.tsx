@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, ReceiptText } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
@@ -27,7 +27,7 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const { t, locale } = useI18n();
   const { profile, accounts: allAccounts, budgets, transactions } = useFinance();
   // Loans can't pay for things; expenses come from cash, bank or credit card.
-  const accounts = allAccounts.filter((a) => canSpendFrom(a.account_type));
+  const accounts = useMemo(() => allAccounts.filter((a) => canSpendFrom(a.account_type)), [allAccounts]);
   const add = useAddTransactions();
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export function QuickAddSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           {accounts.length === 0 ? (
             <>
               <p className="mb-4 rounded-2xl bg-gold-soft px-4 py-3 text-sm">{t("quick.noAccounts")}</p>
-              <AccountForm defaultCurrency={profile.base_currency} onSaved={(a) => setAccountId(a.id)} />
+              <AccountForm defaultCurrency={profile.base_currency} allowLoans={false} onSaved={(a) => setAccountId(a.id)} />
             </>
           ) : (
             <form

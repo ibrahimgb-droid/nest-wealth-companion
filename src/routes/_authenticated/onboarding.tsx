@@ -224,7 +224,7 @@ function Onboarding() {
             <div className="mt-5">
               {showForm ? (
                 <div className="rounded-3xl border border-border bg-card p-4">
-                  <AccountForm defaultCurrency={base} onSaved={() => setShowForm(false)} />
+                  <AccountForm defaultCurrency={base} allowLoans={false} onSaved={() => setShowForm(false)} />
                 </div>
               ) : (
                 <button

@@ -280,6 +280,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
                     <AccountForm
                       defaultCurrency={currency}
                       lockCurrency
+                      allowLoans={false}
                       onSaved={(a) => {
                         setAccountId(a.id);
                         setAddingAccount(false);
