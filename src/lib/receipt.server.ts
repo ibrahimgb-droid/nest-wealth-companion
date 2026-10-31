@@ -32,9 +32,22 @@ Return:
   groceries (food, drinks, household consumables), dining (restaurants, cafes, takeaway), transport (fuel, taxis, parking),
   shopping (clothes, home goods, gifts, beauty), electronics (devices, cables, appliances), utilities (bills, phone top-ups),
   health (pharmacy, clinic, gym), entertainment, education (books, school supplies), housing (furniture, repairs), fees, other.
-Do not list VAT, service charge, rounding, payment or change lines as items. Read Arabic and English text.`;
+Do not list VAT, service charge, rounding, payment or change lines as items. Read Arabic and English text.
+The receipt may be a photo or a PDF (e-receipt, online order or tax invoice); for a multi-page PDF, read all pages as one purchase.`;
 
-export async function readReceipt(imageDataUrl: string): Promise<ReceiptScanResult> {
+/** A receipt photo goes in as an image; a PDF receipt as a file with its base64 bytes. */
+function receiptPart(dataUrl: string) {
+  const comma = dataUrl.indexOf(",");
+  const mediaType = dataUrl.slice(5, dataUrl.indexOf(";"));
+  const base64 = dataUrl.slice(comma + 1);
+  if (!base64) throw new Error("Empty file");
+  if (mediaType === "application/pdf") {
+    return { type: "file" as const, filename: "receipt.pdf", data: base64, mediaType: "application/pdf" };
+  }
+  return { type: "image" as const, image: new URL(dataUrl) };
+}
+
+export async function readReceipt(fileDataUrl: string): Promise<ReceiptScanResult> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) return { ok: false, reason: "failed" };
 
@@ -56,7 +69,7 @@ export async function readReceipt(imageDataUrl: string): Promise<ReceiptScanResu
           role: "user",
           content: [
             { type: "text", text: "Read this receipt." },
-            { type: "file", data: new URL(imageDataUrl), mediaType: imageDataUrl.slice(5, imageDataUrl.indexOf(";")) },
+            receiptPart(fileDataUrl),
           ],
         },
       ],

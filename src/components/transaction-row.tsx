@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { Account, Transaction } from "@/lib/data";
 import { useDeleteTransaction, useToggleShariah } from "@/lib/data";
 import { formatMoney } from "@/lib/currency";
+import { isTransfer } from "@/lib/finance";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "./category-icon";
@@ -31,6 +32,7 @@ export function TransactionRow({ tx, account }: { tx: Transaction; account?: Acc
   const toggle = useToggleShariah();
   const del = useDeleteTransaction();
   const credit = tx.direction === "credit";
+  const transfer = isTransfer(tx);
   const time = format(new Date(tx.occurred_at), "HH:mm", { locale: locale === "ar" ? arSA : enUS });
 
   return (
@@ -45,10 +47,10 @@ export function TransactionRow({ tx, account }: { tx: Transaction; account?: Acc
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p className="truncate font-semibold">{tx.merchant_name}</p>
-            <ShariahBadge ok={tx.shariah_compliant} label={tx.shariah_compliant ? t("tx.halal") : t("tx.nonHalal")} />
+            {!transfer && <ShariahBadge ok={tx.shariah_compliant} label={tx.shariah_compliant ? t("tx.halal") : t("tx.nonHalal")} />}
           </div>
           <p className="truncate text-xs text-muted-foreground">
-            {t(`cat.${tx.category}` as MessageKey)} · {t(`pm.${tx.payment_method}` as MessageKey)} · {time}
+            {transfer ? t("cat.transfer") : `${t(`cat.${tx.category}` as MessageKey)} · ${t(`pm.${tx.payment_method}` as MessageKey)}`} · {time}
           </p>
         </div>
         <span className={cn("shrink-0 font-bold tabular-nums", credit ? "text-primary" : "text-foreground")}>
@@ -67,6 +69,7 @@ export function TransactionRow({ tx, account }: { tx: Transaction; account?: Acc
             </dd>
           </dl>
           <div className="flex gap-2">
+            {!transfer && (
             <button
               type="button"
               disabled={toggle.isPending}
@@ -78,15 +81,16 @@ export function TransactionRow({ tx, account }: { tx: Transaction; account?: Acc
             >
               {tx.shariah_compliant ? t("tx.markNonHalal") : t("tx.markHalal")}
             </button>
+            )}
             <button
               type="button"
               aria-label={t("common.delete")}
               disabled={del.isPending}
               onClick={async () => {
-                await del.mutateAsync(tx.id);
+                await del.mutateAsync(tx);
                 toast(t("tx.deleted"));
               }}
-              className="rounded-xl border border-destructive/40 px-3 py-2 text-destructive"
+              className={cn("rounded-xl border border-destructive/40 px-3 py-2 text-destructive", transfer && "ms-auto")}
             >
               <Trash2 className="size-4" />
             </button>

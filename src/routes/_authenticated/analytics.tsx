@@ -8,7 +8,7 @@ import { AppShell, Card, SectionTitle } from "@/components/app-shell";
 import { PageLoader } from "@/components/page-loader";
 import { ensureFinanceData, useFinance } from "@/lib/data";
 import { convert, formatMoney } from "@/lib/currency";
-import { isInMonth, spendByCategory } from "@/lib/finance";
+import { isInMonth, isTransfer, spendByCategory } from "@/lib/finance";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
@@ -50,7 +50,7 @@ function Analytics() {
       let income = 0;
       let spend = 0;
       for (const tx of transactions) {
-        if (!isInMonth(tx.occurred_at, ref)) continue;
+        if (!isInMonth(tx.occurred_at, ref) || isTransfer(tx)) continue;
         const v = convert(Number(tx.amount), tx.currency, base);
         if (tx.direction === "credit") income += v;
         else spend += v;
@@ -58,7 +58,7 @@ function Analytics() {
       return { label: format(ref, "MMM", { locale: locale === "ar" ? arSA : enUS }), income, spend };
     });
 
-    const monthTx = transactions.filter((tx) => tx.direction === "debit" && isInMonth(tx.occurred_at));
+    const monthTx = transactions.filter((tx) => tx.direction === "debit" && !isTransfer(tx) && isInMonth(tx.occurred_at));
     const compliant = monthTx.filter((tx) => tx.shariah_compliant).reduce((s, tx) => s + convert(Number(tx.amount), tx.currency, base), 0);
     const shariahPct = totalSpend > 0 ? Math.round((compliant / totalSpend) * 100) : 100;
 

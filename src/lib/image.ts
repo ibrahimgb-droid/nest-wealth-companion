@@ -13,3 +13,23 @@ export async function photoToDataUrl(file: File, maxSide = 1600, quality = 0.85)
   bitmap.close();
   return canvas.toDataURL("image/jpeg", quality);
 }
+
+export const MAX_PDF_BYTES = 4 * 1024 * 1024;
+
+export function isPdf(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+/** Read a PDF as a base64 data URL (no resizing). Call from event handlers only. */
+export function pdfToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? "");
+      // Some browsers report an empty or generic type; normalise it.
+      resolve(url.replace(/^data:[^;]*;base64,/, "data:application/pdf;base64,"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
