@@ -297,3 +297,58 @@ export function groupReceipt(items: ReceiptLine[], decimals = 2) {
     .map(([category, lines]) => ({ category, lines, amount: roundTo(lines.reduce((s, l) => s + l.price, 0), decimals) }))
     .sort((a, b) => b.amount - a.amount);
 }
+
+// ---------------------------------------------------------------------------
+// Receipt payment → account: use what the receipt printed (cash, card brand,
+// last 4 digits, bank) to pick the account it was paid from.
+
+/** Account kind a receipt payment comes from: cash wallet, credit card, or bank (debit card / mada / KNET). */
+export function paymentKind(p: ReceiptPayment): "cash" | "bank" | "credit" | null {
+  if (p.method === "cash") return "cash";
+  if (p.method === "credit_card") return "credit";
+  if (p.method === "debit_card") return "bank";
+  if (p.method === "card") return /mada|knet|debit/i.test(p.brand ?? "") ? "bank" : "credit";
+  return null;
+}
+
+/** Suggested name for a new account made from a receipt payment, e.g. "Visa •1234". */
+export function paymentAccountName(p: ReceiptPayment): string | null {
+  const brand = p.brand?.trim() || null;
+  const last4 = p.last4?.replace(/\D/g, "").slice(-4) || null;
+  if (!brand && !last4) return null;
+  return [brand, last4 ? `•${last4}` : null].filter(Boolean).join(" ");
+}
+
+interface MatchableAccount {
+  id: string;
+  name: string;
+  institution: string | null;
+  account_type: string;
+}
+
+/**
+ * Picks the account a receipt was paid from: an account whose name or bank
+ * shows the card's last 4 digits wins; otherwise an account of the matching
+ * kind (preferring the printed bank). `exact` is true only for a last-4 match
+ * or the only account of that kind.
+ */
+export function matchPaymentAccount<T extends MatchableAccount>(accounts: T[], p: ReceiptPayment) {
+  const last4 = p.last4?.replace(/\D/g, "").slice(-4);
+  if (last4 && last4.length === 4) {
+    const hit = accounts.find((a) => `${a.name} ${a.institution ?? ""}`.includes(last4));
+    if (hit) return { account: hit, exact: true };
+  }
+  const kind = paymentKind(p);
+  if (!kind) return { account: null, exact: false };
+  const sameKind = accounts.filter((a) => accountKind(a.account_type) === kind);
+  const bank = p.bank?.trim().toLowerCase();
+  const byBank = bank
+    ? sameKind.find((a) => {
+        const text = `${a.name} ${a.institution ?? ""}`.toLowerCase();
+        return text.includes(bank) || bank.includes((a.institution ?? "\u0000").toLowerCase());
+      })
+    : undefined;
+  if (byBank) return { account: byBank, exact: !last4 };
+  if (sameKind.length === 1 && !last4) return { account: sameKind[0]!, exact: kind === "cash" || !bank };
+  return { account: sameKind[0] ?? null, exact: false };
+}
