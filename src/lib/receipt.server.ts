@@ -2,7 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError, NoObjectGeneratedError, Output, streamText } from "ai";
 import { z } from "zod";
 import { AI_GATEWAY_URL, createLovableAiGatewayRunIdFetch } from "./ai-gateway.server";
-import { RECEIPT_CATEGORIES, type ReceiptScanResult } from "./receipt-types";
+import { PAYMENT_METHODS, RECEIPT_CATEGORIES, type ReceiptScanResult } from "./receipt-types";
 
 const MODEL = "openai/gpt-6-astra";
 
@@ -19,6 +19,12 @@ const receiptSchema = z.object({
       category: z.enum(RECEIPT_CATEGORIES),
     }),
   ),
+  payment: z.object({
+    method: z.enum(PAYMENT_METHODS),
+    card_brand: z.string().nullable(),
+    card_last4: z.string().nullable(),
+    bank: z.string().nullable(),
+  }),
 });
 
 const INSTRUCTIONS = `You read shop receipts from the UAE, Saudi Arabia and Kuwait for a personal finance app.
@@ -32,6 +38,10 @@ Return:
   groceries (food, drinks, household consumables), dining (restaurants, cafes, takeaway), transport (fuel, taxis, parking),
   shopping (clothes, home goods, gifts, beauty), electronics (devices, cables, appliances), utilities (bills, phone top-ups),
   health (pharmacy, clinic, gym), entertainment, education (books, school supplies), housing (furniture, repairs), fees, other.
+- payment: how it was paid, from the payment lines / card slip:
+  method: cash, credit_card (says credit), debit_card (says debit, mada, KNET), card (card but credit/debit not stated), or unknown;
+  card_brand: e.g. Visa, Mastercard, Amex, mada, KNET, Apple Pay, or null; card_last4: last 4 digits of the masked card number, or null;
+  bank: the card's issuing bank if printed (e.g. "NBK", "Emirates NBD", "Al Rajhi"), or null.
 Do not list VAT, service charge, rounding, payment or change lines as items. Read Arabic and English text.
 The receipt may be a photo or a PDF (e-receipt, online order or tax invoice); for a multi-page PDF, read all pages as one purchase.`;
 
@@ -94,6 +104,12 @@ export async function readReceipt(fileDataUrl: string): Promise<ReceiptScanResul
         currency: out.currency,
         total: Number(out.total) || 0,
         items: out.items.map((i) => ({ name: i.name.trim(), price: Number(i.price) || 0, category: i.category })),
+        payment: {
+          method: out.payment.method,
+          brand: out.payment.card_brand?.trim() || null,
+          last4: out.payment.card_last4?.replace(/\D/g, "").slice(-4) || null,
+          bank: out.payment.bank?.trim() || null,
+        },
       },
     };
   } catch (error) {

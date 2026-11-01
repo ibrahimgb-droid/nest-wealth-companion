@@ -7,6 +7,9 @@ import {
   canSpendFrom,
   checkSpend,
   groupReceipt,
+  matchPaymentAccount,
+  paymentAccountName,
+  paymentKind,
   openingBalance,
   outstanding,
   paymentMethodFor,
@@ -208,5 +211,38 @@ describe("receipt split", () => {
       ["electronics", 299],
       ["groceries", 66.5],
     ]);
+  });
+});
+
+describe("receipt payment account", () => {
+  const accts = [
+    { id: "cash", name: "Wallet", institution: null, account_type: "cash" },
+    { id: "nbk", name: "NBK Visa", institution: "NBK", account_type: "credit" },
+    { id: "adcb", name: "Card •4821", institution: "ADCB", account_type: "credit" },
+    { id: "salary", name: "Salary", institution: "Emirates NBD", account_type: "bank" },
+  ];
+  const pay = (p: Partial<Parameters<typeof paymentKind>[0]>) => ({ method: "unknown" as const, brand: null, last4: null, bank: null, ...p });
+
+  it("picks the card whose name shows the receipt's last 4 digits", () => {
+    expect(matchPaymentAccount(accts, pay({ method: "card", brand: "Visa", last4: "**** 4821" }))).toEqual({ account: accts[2], exact: true });
+  });
+  it("matches a cash receipt to the cash wallet", () => {
+    expect(matchPaymentAccount(accts, pay({ method: "cash" })).account?.id).toBe("cash");
+  });
+  it("treats mada / KNET card payments as paid from a bank account", () => {
+    expect(paymentKind(pay({ method: "card", brand: "mada" }))).toBe("bank");
+    expect(paymentKind(pay({ method: "card", brand: "KNET" }))).toBe("bank");
+    expect(paymentKind(pay({ method: "card", brand: "Mastercard" }))).toBe("credit");
+  });
+  it("prefers the credit card from the bank printed on the receipt", () => {
+    expect(matchPaymentAccount(accts, pay({ method: "credit_card", bank: "NBK" }))).toEqual({ account: accts[1], exact: true });
+  });
+  it("flags a card that isn't added yet so the user can add it", () => {
+    const m = matchPaymentAccount(accts, pay({ method: "credit_card", brand: "Amex", last4: "9001" }));
+    expect(m.exact).toBe(false);
+    expect(paymentAccountName(pay({ brand: "Amex", last4: "xx9001" }))).toBe("Amex •9001");
+  });
+  it("suggests nothing when the receipt doesn't say how it was paid", () => {
+    expect(matchPaymentAccount(accts, pay({}))).toEqual({ account: null, exact: false });
   });
 });

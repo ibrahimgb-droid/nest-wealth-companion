@@ -309,6 +309,13 @@ export const en = {
   "dash.payCard": "Pay card",
   "dash.payCardHint": "Clear what you owe",
   "receipt.err.tooBig": "That file is too big. Use a PDF under 4 MB.",
+  "receipt.paidWith": "Receipt: {method}",
+  "receipt.pay.cash": "Cash",
+  "receipt.pay.card": "Card",
+  "receipt.addThis": "Add {method} as an account",
+  "receipt.addThisHint": "This receipt was paid with an account you haven't added yet.",
+  "receipt.newAccount": "New account",
+  "receipt.newAccountIntro": "Add the {currency} account you paid with.",
   "receipt.pdf": "PDF receipt",
 } as const;
 

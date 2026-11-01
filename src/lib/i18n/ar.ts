@@ -311,5 +311,12 @@ export const ar: Record<MessageKey, string> = {
   "dash.payCard": "سدّد البطاقة",
   "dash.payCardHint": "صفّر اللي عليك",
   "receipt.err.tooBig": "الملف كبير. استخدم PDF أقل من 4 ميغا.",
+  "receipt.paidWith": "الفاتورة: {method}",
+  "receipt.pay.cash": "كاش",
+  "receipt.pay.card": "بطاقة",
+  "receipt.addThis": "أضف {method} كحساب",
+  "receipt.addThisHint": "دفعت هالفاتورة من حساب ما أضفته للحين.",
+  "receipt.newAccount": "حساب جديد",
+  "receipt.newAccountIntro": "أضف حساب الـ{currency} اللي دفعت منه.",
   "receipt.pdf": "فاتورة PDF",
 };
