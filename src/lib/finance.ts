@@ -330,8 +330,8 @@ interface MatchableAccount {
 /**
  * Picks the account a receipt was paid from: an account whose name or bank
  * shows the card's last 4 digits wins; otherwise an account of the matching
- * kind (preferring the printed bank). `exact` is true only for a last-4 match
- * or the only account of that kind.
+ * kind (preferring the printed bank). `exact` is false when the receipt
+ * names a card the user hasn't added yet, so the app can offer to add it.
  */
 export function matchPaymentAccount<T extends MatchableAccount>(accounts: T[], p: ReceiptPayment) {
   const last4 = p.last4?.replace(/\D/g, "").slice(-4);
@@ -352,5 +352,4 @@ export function matchPaymentAccount<T extends MatchableAccount>(accounts: T[], p
   const account = byBank ?? sameKind[0] ?? null;
   const exact = !!account && !last4 && (!!byBank || sameKind.length === 1 || kind === "cash");
   return { account, exact };
-};
 }
