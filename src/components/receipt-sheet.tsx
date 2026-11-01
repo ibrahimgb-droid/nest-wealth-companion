@@ -1,14 +1,23 @@
 import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Camera, Check, FileText, ImageUp, Loader2, RotateCcw, ScanLine } from "lucide-react";
+import { Camera, Check, CreditCard, FileText, ImageUp, Loader2, Plus, RotateCcw, ScanLine, X } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useAddTransactions, useFinance } from "@/lib/data";
 import { GCC_CURRENCIES, decimalsFor, formatMoney, type GccCurrency } from "@/lib/currency";
-import { accountKind, allocateReceipt, canSpendFrom, groupReceipt, paymentMethodFor } from "@/lib/finance";
+import {
+  accountKind,
+  allocateReceipt,
+  canSpendFrom,
+  groupReceipt,
+  matchPaymentAccount,
+  paymentAccountName,
+  paymentKind,
+  paymentMethodFor,
+} from "@/lib/finance";
 import { MAX_PDF_BYTES, isPdf, pdfToDataUrl, photoToDataUrl } from "@/lib/image";
 import { scanReceipt } from "@/lib/receipt.functions";
-import type { ScannedReceipt } from "@/lib/receipt-types";
+import type { ReceiptPayment, ScannedReceipt } from "@/lib/receipt-types";
 import { evaluateSpend } from "@/lib/spend-guard";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -67,9 +76,24 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
     setAddingAccount(false);
   }
 
-  function pickAccount(cur: string) {
+  const payment = receipt?.payment;
+  const paidWith = payment ? paymentLabel(payment) : null;
+  const paidMatch = payment ? matchPaymentAccount(matching, payment) : null;
+  // The receipt names a card/cash the user hasn't added in this currency yet.
+  const suggestAdd = !!payment && !!paymentKind(payment) && !paidMatch?.exact;
+
+  function paymentLabel(p: ReceiptPayment) {
+    if (p.method === "cash") return t("receipt.pay.cash");
+    const name = paymentAccountName(p);
+    if (name) return p.bank ? `${name} · ${p.bank}` : name;
+    if (p.method === "unknown") return null;
+    return p.bank ? `${t("receipt.pay.card")} · ${p.bank}` : t("receipt.pay.card");
+  }
+
+  function pickAccount(cur: string, p?: ReceiptPayment) {
     const list = spendable.filter((a) => a.currency === cur);
-    const preferred = list.find((a) => accountKind(a.account_type) !== "cash") ?? list[0];
+    const fromReceipt = p ? matchPaymentAccount(list, p).account : null;
+    const preferred = fromReceipt ?? list.find((a) => accountKind(a.account_type) !== "cash") ?? list[0];
     setAccountId(preferred?.id ?? null);
   }
 
@@ -101,7 +125,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
       setReceipt(res.receipt);
       setMerchant(res.receipt.merchant);
       setCurrency(cur);
-      pickAccount(cur);
+      pickAccount(cur, res.receipt.payment);
       setStage("review");
     } catch {
       setError(t("receipt.err.failed"));
@@ -244,7 +268,7 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   value={currency}
                   onChange={(c) => {
                     setCurrency(c);
-                    pickAccount(c);
+                    pickAccount(c, receipt.payment);
                     setAddingAccount(false);
                   }}
                   options={GCC_CURRENCIES.map((c) => ({ value: c, label: c }))}
@@ -277,16 +301,71 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">{t("receipt.paidFrom")}</p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t("receipt.paidFrom")}</p>
+                  {paidWith && (
+                    <span className="inline-flex min-w-0 items-center gap-1.5 truncate rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                      <CreditCard className="size-3.5 shrink-0 text-gold" />
+                      <span className="truncate">{t("receipt.paidWith", { method: paidWith })}</span>
+                    </span>
+                  )}
+                </div>
                 {matching.length > 0 && !addingAccount ? (
-                  <AccountPicker accounts={matching} value={accountId} onChange={setAccountId} />
+                  <>
+                    <AccountPicker accounts={matching} value={accountId} onChange={setAccountId} />
+                    {suggestAdd ? (
+                      <button
+                        type="button"
+                        onClick={() => setAddingAccount(true)}
+                        className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-dashed border-gold/50 bg-gold-soft px-4 py-3 text-start text-sm"
+                      >
+                        <Plus className="size-4 shrink-0 text-gold" />
+                        <span className="flex-1">
+                          <span className="block font-semibold">{t("receipt.addThis", { method: paidWith ?? t("receipt.pay.card") })}</span>
+                          <span className="block text-[11px] text-muted-foreground">{t("receipt.addThisHint")}</span>
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAddingAccount(true)}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-gold"
+                      >
+                        <Plus className="size-3.5" /> {t("receipt.newAccount")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="space-y-3 rounded-3xl border border-border p-4">
-                    <p className="text-sm">{t("receipt.noAccount", { currency })}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm">
+                        {matching.length > 0 ? t("receipt.newAccountIntro", { currency }) : t("receipt.noAccount", { currency })}
+                      </p>
+                      {matching.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAddingAccount(false)}
+                          aria-label={t("common.cancel")}
+                          className="-me-1 -mt-1 rounded-full p-1 text-muted-foreground"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
+                    </div>
                     <AccountForm
+                      key={`${currency}-${payment?.method}-${payment?.last4}`}
                       defaultCurrency={currency}
                       lockCurrency
                       allowLoans={false}
+                      initial={
+                        payment
+                          ? {
+                              kind: paymentKind(payment) ?? undefined,
+                              name: payment.method === "cash" ? null : paymentAccountName(payment),
+                              institution: payment.bank,
+                            }
+                          : undefined
+                      }
                       onSaved={(a) => {
                         setAccountId(a.id);
                         setAddingAccount(false);

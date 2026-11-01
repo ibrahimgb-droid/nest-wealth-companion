@@ -138,20 +138,23 @@ export function AccountForm({
   allowLoans = true,
   onSaved,
   submitLabel,
+  initial,
 }: {
   defaultCurrency: string;
   lockCurrency?: boolean;
   allowLoans?: boolean;
   onSaved?: (account: Account) => void;
   submitLabel?: string;
+  /** Pre-fill, e.g. from the card printed on a scanned receipt. */
+  initial?: { kind?: AccountKind; name?: string | null; institution?: string | null };
 }) {
   const { t } = useI18n();
   const { accounts } = useFinance();
   const add = useAddAccount();
   const addTx = useAddTransactions();
-  const [kind, setKind] = useState<AccountKind>("cash");
-  const [name, setName] = useState("");
-  const [institution, setInstitution] = useState("");
+  const [kind, setKind] = useState<AccountKind>(initial?.kind ?? "cash");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [institution, setInstitution] = useState(initial?.institution ?? "");
   const [currency, setCurrency] = useState<GccCurrency>(defaultCurrency as GccCurrency);
   const [balance, setBalance] = useState("");
   const [linkId, setLinkId] = useState<string | null>(null);
