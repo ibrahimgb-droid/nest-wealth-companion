@@ -146,7 +146,7 @@ export function AccountForm({
   onSaved?: (account: Account) => void;
   submitLabel?: string;
   /** Pre-fill, e.g. from the card printed on a scanned receipt. */
-  initial?: { kind?: AccountKind; name?: string | null; institution?: string | null };
+  initial?: { kind?: AccountKind | undefined; name?: string | null; institution?: string | null } | undefined;
 }) {
   const { t } = useI18n();
   const { accounts } = useFinance();
