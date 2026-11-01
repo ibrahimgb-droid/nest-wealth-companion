@@ -1,4 +1,5 @@
 import { convert } from "./currency";
+import type { ReceiptPayment } from "./receipt-types";
 
 export type Category =
   | "housing"
@@ -344,11 +345,12 @@ export function matchPaymentAccount<T extends MatchableAccount>(accounts: T[], p
   const bank = p.bank?.trim().toLowerCase();
   const byBank = bank
     ? sameKind.find((a) => {
-        const text = `${a.name} ${a.institution ?? ""}`.toLowerCase();
-        return text.includes(bank) || bank.includes((a.institution ?? "\u0000").toLowerCase());
+        const inst = (a.institution ?? "").trim().toLowerCase();
+        return `${a.name} ${inst}`.toLowerCase().includes(bank) || (inst.length > 1 && bank.includes(inst));
       })
     : undefined;
-  if (byBank) return { account: byBank, exact: !last4 };
-  if (sameKind.length === 1 && !last4) return { account: sameKind[0]!, exact: kind === "cash" || !bank };
-  return { account: sameKind[0] ?? null, exact: false };
+  const account = byBank ?? sameKind[0] ?? null;
+  const exact = !!account && !last4 && (!!byBank || sameKind.length === 1 || kind === "cash");
+  return { account, exact };
+};
 }
