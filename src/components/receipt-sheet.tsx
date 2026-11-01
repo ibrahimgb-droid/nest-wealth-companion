@@ -144,13 +144,19 @@ export function ReceiptSheet({ open, onOpenChange }: { open: boolean; onOpenChan
   return (
     <Drawer
       open={open}
+      handleOnly
+      repositionInputs={false}
       onOpenChange={(o) => {
         if (!o && stage !== "reading") reset();
         onOpenChange(o);
       }}
     >
-      <DrawerContent className="mx-auto max-h-[92dvh] max-w-md">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+      <DrawerContent className="mx-auto h-[92dvh] max-h-[92dvh] max-w-md">
+        <div
+          data-vaul-no-drag
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 pb-[calc(2rem+env(safe-area-inset-bottom))]"
+        >
           <DrawerTitle className="mb-1 flex items-center gap-2 text-base font-semibold">
             <ScanLine className="size-5 text-gold" /> {t("receipt.title")}
           </DrawerTitle>
